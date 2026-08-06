@@ -1,23 +1,34 @@
 import re
 
-def is_email_valid(email: str) -> bool:
+def validate_email(email):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
 
-def is_phone_number_valid(phone: str) -> bool:
-    pattern = r'^\+?[1-9]\d{1,14}$'
-    return re.match(pattern, phone) is not None
+def validate_positive_integer(value):
+    return isinstance(value, int) and value > 0
 
-def is_url_valid(url: str) -> bool:
-    pattern = r'^(http|https)://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/\S*)?$'
-    return re.match(pattern, url) is not None
+# A simple dictionary for validation errors
+class ValidationError:
+    def __init__(self):
+        self.errors = []
+    
+    def add_error(self, message):
+        self.errors.append(message)
 
-def validate_inputs(inputs: dict) -> dict:
-    errors = {}
-    if 'email' in inputs and not is_email_valid(inputs['email']):
-        errors['email'] = 'Invalid email address'
-    if 'phone' in inputs and not is_phone_number_valid(inputs['phone']):
-        errors['phone'] = 'Invalid phone number'
-    if 'url' in inputs and not is_url_valid(inputs['url']):
-        errors['url'] = 'Invalid URL'
-    return errors
+    def has_errors(self):
+        return len(self.errors) > 0
+
+
+def main_processing_loop(data):
+    validator = ValidationError()
+    for entry in data:
+        email = entry.get('email')
+        age = entry.get('age')
+        
+        if not validate_email(email):
+            validator.add_error(f'Invalid email: {email}')
+        if not validate_positive_integer(age):
+            validator.add_error(f'Invalid age: {age}')
+    
+    if validator.has_errors():
+        raise ValueError(f'Validation errors: {validator.errors}')
