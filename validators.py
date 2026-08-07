@@ -1,34 +1,34 @@
 import re
 
-def validate_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+class Validator:
+    @staticmethod
+    def is_email_valid(email: str) -> bool:
+        pattern = r'^[\w!#$%&'*+/=?`{|}~^.-]+@[\w.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
 
-def validate_positive_integer(value):
-    return isinstance(value, int) and value > 0
+    @staticmethod
+    def is_phone_valid(phone: str) -> bool:
+        pattern = r'\+?1?\d{9,15}'
+        return re.match(pattern, phone) is not None
 
-# A simple dictionary for validation errors
-class ValidationError:
-    def __init__(self):
-        self.errors = []
-    
-    def add_error(self, message):
-        self.errors.append(message)
+    @staticmethod
+    def is_username_valid(username: str) -> bool:
+        pattern = r'^[a-zA-Z0-9_.-]{3,20}$'
+        return re.match(pattern, username) is not None
 
-    def has_errors(self):
-        return len(self.errors) > 0
+    @staticmethod
+    def validate_data(data: dict) -> dict:
+        results = {
+            'email': Validator.is_email_valid(data.get('email', '')),  
+            'phone': Validator.is_phone_valid(data.get('phone', '')),  
+            'username': Validator.is_username_valid(data.get('username', ''))
+        }
+        return results
 
-
-def main_processing_loop(data):
-    validator = ValidationError()
-    for entry in data:
-        email = entry.get('email')
-        age = entry.get('age')
-        
-        if not validate_email(email):
-            validator.add_error(f'Invalid email: {email}')
-        if not validate_positive_integer(age):
-            validator.add_error(f'Invalid age: {age}')
-    
-    if validator.has_errors():
-        raise ValueError(f'Validation errors: {validator.errors}')
+if __name__ == '__main__':
+    sample_data = {
+        'email': 'example@test.com',
+        'phone': '+1234567890',
+        'username': 'user_name123'
+    }
+    print(Validator.validate_data(sample_data))
