@@ -1,41 +1,32 @@
 class CustomError(Exception):
-    def __init__(self, message):
-        super().__init__(message)
+    """Base class for custom exceptions."""
+    pass
+
+class ValidationError(CustomError):
+    """Raised for validation errors."""
+    def __init__(self, message, errors=None):
         self.message = message
+        self.errors = errors or []
+        super().__init__(self.message)
 
-# Error handler for division function
+class ConnectionError(CustomError):
+    """Raised for connection-related issues."""
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
-def safe_divide(numerator, denominator):
-    try:
-        if denominator == 0:
-            raise CustomError('Denominator cannot be zero')
-        return numerator / denominator
-    except CustomError as e:
-        print(f'Error: {e.message}')
-        return None
-    except TypeError:
-        print('Error: Both numerator and denominator must be numbers')
-        return None
+class NotFoundError(CustomError):
+    """Raised when a resource is not found."""
+    def __init__(self, resource):
+        self.message = f'{resource} not found'
+        super().__init__(self.message)
 
-# Error handler for file reading
-
-def read_file(file_path):
-    try:
-        with open(file_path, 'r') as file:
-            return file.read()
-    except FileNotFoundError:
-        print(f'Error: File {file_path} not found')
-        return None
-    except IOError:
-        print('Error: Could not read file')
-        return None
-
-# Error handler for JSON parsing
-
-def parse_json(json_string):
-    import json
-    try:
-        return json.loads(json_string)
-    except json.JSONDecodeError:
-        print('Error: Invalid JSON string')
-        return None
+def handle_error(error):
+    if isinstance(error, ValidationError):
+        return {'status': 'error', 'message': error.message, 'details': error.errors}
+    elif isinstance(error, ConnectionError):
+        return {'status': 'error', 'message': 'Connection issue: ' + error.message}
+    elif isinstance(error, NotFoundError):
+        return {'status': 'error', 'message': error.message}
+    else:
+        return {'status': 'error', 'message': 'An unknown error occurred'}
