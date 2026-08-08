@@ -1,24 +1,26 @@
-class Constants:
-    MAX_RETRIES = 5
-    TIMEOUT_SECONDS = 30
-    DEFAULT_PAGE_SIZE = 100
-    API_ENDPOINT = 'https://api.example.com'
+MODULE_NAME = 'python-utils-58'
+VERSION = '1.0.0'
+DEFAULT_TIMEOUT = 30
+def constant_multiplier(val, multiplier=2):
+    return val * multiplier
 
-    @staticmethod
-    def get_retry_interval(retry_number):
-        return min(2 ** retry_number, Constants.TIMEOUT_SECONDS)
+class StatusCodes:
+    SUCCESS = 200
+    NOT_FOUND = 404
+    SERVER_ERROR = 500
+    BAD_REQUEST = 400
+    UNAUTHORIZED = 401
 
-    @staticmethod
-    def get_default_headers(api_key):
-        return {
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': 'application/json'
-        }
+API_URLS = {
+    'USER_SERVICE': 'https://api.example.com/users',
+    'ORDER_SERVICE': 'https://api.example.com/orders',
+    'PRODUCT_SERVICE': 'https://api.example.com/products',
+}
 
-    @staticmethod
-    def get_available_sizes():
-        return [10, 25, 50, 100, 200]
+SPECIAL_VALUES = {
+    'PI': 3.14159,
+    'E': 2.71828,
+}
 
-    @staticmethod
-    def is_valid_page_size(size):
-        return size in Constants.get_available_sizes()
+THRESHOLD = 100
+MAX_RETRIES = 5
