@@ -1,28 +1,32 @@
-import math
-import string
-import random
+import json
+from collections import defaultdict
 
-def generate_random_string(length=10, include_digits=True, include_punctuation=False):
-    charset = string.ascii_letters
-    if include_digits:
-        charset += string.digits
-    if include_punctuation:
-        charset += string.punctuation
-    return ''.join(random.choice(charset) for _ in range(length))
+class DataHandler:
+    def __init__(self, data):
+        self.data = data
 
+    def to_json(self):
+        return json.dumps(self.data, default=str)
 
-def calculate_square_root(value):
-    if value < 0:
-        raise ValueError('Cannot compute the square root of a negative number')
-    return math.sqrt(value)
+    def group_by(self, key):
+        grouped_data = defaultdict(list)
+        for item in self.data:
+            grouped_data[item[key]].append(item)
+        return dict(grouped_data)
 
+    def flatten(self, key):
+        flat_list = []
+        for item in self.data:
+            flat_list.append(item[key])
+        return flat_list
 
-def is_palindrome(s):
-    cleaned = ''.join(c.lower() for c in s if c.isalnum())
-    return cleaned == cleaned[::-1]
-
-
-def factorial(n):
-    if n < 0:
-        raise ValueError('Factorial is not defined for negative numbers')
-    return 1 if n == 0 else n * factorial(n - 1)
+if __name__ == '__main__':
+    sample_data = [
+        {'name': 'Alice', 'age': 30, 'city': 'New York'},
+        {'name': 'Bob', 'age': 25, 'city': 'Los Angeles'},
+        {'name': 'Alice', 'age': 30, 'city': 'Chicago'},
+    ]
+    handler = DataHandler(sample_data)
+    print(handler.to_json())
+    print(handler.group_by('name'))
+    print(handler.flatten('city'))
