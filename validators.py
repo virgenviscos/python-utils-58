@@ -1,36 +1,23 @@
 import re
 
+class ValidationError(Exception):
+    pass
+
 def validate_username(username):
-    if not isinstance(username, str) or not username:
-        return False
-    return re.match(r'^[a-zA-Z0-9_]{3,15}$', username) is not None
-
-
-def validate_level(level):
-    if not isinstance(level, int) or level < 1 or level > 100:
-        return False
+    if not isinstance(username, str):
+        raise ValidationError('Username must be a string')
+    if len(username) < 3 or len(username) > 20:
+        raise ValidationError('Username must be between 3 and 20 characters')
+    if not re.match('^[a-zA-Z0-9_]+$', username):
+        raise ValidationError('Username can only contain letters, numbers, and underscores')
     return True
 
-
-def validate_input(username, level):
-    if not validate_username(username):
-        return 'Invalid username. It must be 3-15 characters long, using letters, numbers, and underscores.'
-    if not validate_level(level):
-        return 'Invalid level. It must be an integer between 1 and 100.'
-    return True
-
-
-def main_processing_loop():
-    for _ in range(5):  # Simulating 5 user inputs
-        username = input('Enter your username: ')
-        level = input('Enter your level (1-100): ')
+# Example Usage
+if __name__ == '__main__':
+    usernames = ['valid_user', 'us', 'user_with_special@char', 12345, 'toolongusernamebeyondtwenty']
+    for username in usernames:
         try:
-            level = int(level)
-        except ValueError:
-            print('Level must be an integer.')
-            continue
-        validation_result = validate_input(username, level)
-        if validation_result is not True:
-            print(validation_result)
-        else:
-            print('Valid input! Proceeding with the game...')
+            validate_username(username)
+            print(f'Username "{username}" is valid.')
+        except ValidationError as e:
+            print(f'Username "{username}" is invalid: {e}')
