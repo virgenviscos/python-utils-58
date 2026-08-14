@@ -1,35 +1,38 @@
-import time
-import requests
-from functools import wraps
+import json
+import random
+from typing import List, Dict, Any
 
+class GameDataHandler:
+    def __init__(self, filename: str):
+        self.filename = filename
+        self.data = self.load_data()
 
-def retry(retries=3, delay=2, backoff=2):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            for attempt in range(retries):
-                try:
-                    return func(*args, **kwargs)
-                except requests.exceptions.RequestException as e:
-                    if attempt < retries - 1:
-                        time.sleep(delay)
-                        delay *= backoff  # Increase delay
-                    else:
-                        raise e  # Reraise the exception after retries are exhausted
-        return wrapper
-    return decorator
+    def load_data(self) -> List[Dict[str, Any]]:
+        try:
+            with open(self.filename, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f'Error loading data: {e}')
+            return []
 
+    def save_data(self) -> None:
+        with open(self.filename, 'w') as f:
+            json.dump(self.data, f, indent=4)
 
-@retry(retries=5, delay=1)
-def fetch_data(url):
-    response = requests.get(url)
-    response.raise_for_status()  # Raises an error for bad responses
-    return response.json()
+    def get_random_game(self) -> Dict[str, Any]:
+        if self.data:
+            return random.choice(self.data)
+        return {}  
 
+    def add_game(self, game: Dict[str, Any]) -> None:
+        self.data.append(game)
+        self.save_data()
 
-if __name__ == '__main__':
-    try:
-        data = fetch_data('https://api.example.com/data')
-        print(data)
-    except requests.exceptions.RequestException as e:
-        print(f'Network error: {e}')
+    def find_game_by_name(self, name: str) -> List[Dict[str, Any]]:
+        return [game for game in self.data if game.get('name') == name]
+
+# Example of usage
+# handler = GameDataHandler('games.json')
+# handler.add_game({'name': 'Super Adventure', 'genre': 'RPG'})
+# print(handler.get_random_game())
+# print(handler.find_game_by_name('Super Adventure'))
