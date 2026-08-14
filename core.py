@@ -1,41 +1,36 @@
-from typing import List, Dict, Optional
+import time
+import random
 
+class Game:
+    def __init__(self):
+        self.score = 0
+        self.high_score = 0
+        self.running = True
 
-def calculate_player_score(points: List[int], multipliers: Optional[Dict[str, int]] = None) -> float:
-    """
-    Calculate the total score for a player based on points and optional multipliers.
+    def play_round(self):
+        start_time = time.time()
+        outcome = random.choice([True, False])
+        if outcome:
+            self.score += 10
+            print('Round won!')
+        else:
+            print('Round lost!')
+        elapsed_time = time.time() - start_time
+        print(f'Time taken for round: {elapsed_time:.2f} seconds')
+        self.update_high_score()
 
-    :param points: A list of integers representing the points scored by the player.
-    :param multipliers: An optional dictionary with game elements as keys and their respective multipliers as values.
-    :return: The calculated total score as a float.
-    """
-    if multipliers is None:
-        multipliers = {}
+    def update_high_score(self):
+        if self.score > self.high_score:
+            self.high_score = self.score
+            print('New high score!')
 
-    total_score = sum(points)
-    for element, multiplier in multipliers.items():
-        total_score += total_score * multiplier / 100
-    return total_score
+    def reset_game(self):
+        print('Resetting game...')
+        self.score = 0
 
-
-def reset_player_stats() -> Dict[str, int]:
-    """
-    Reset the player statistics to default values.
-
-    :return: A dictionary with default player stats.
-    """
-    return {
-        'kills': 0,
-        'deaths': 0,
-        'score': 0
-    }
-
-
-def is_valid_player_name(player_name: str) -> bool:
-    """
-    Validate the player's name based on specific criteria.
-
-    :param player_name: The name of the player to validate.
-    :return: True if the name is valid, otherwise False.
-    """
-    return player_name.isalnum() and 3 <= len(player_name) <= 16
+    def start(self):
+        while self.running:
+            self.play_round()
+            if input('Play another round? (y/n): ').lower() != 'y':
+                self.running = False
+        print(f'Final score: {self.score}, High score: {self.high_score}')
