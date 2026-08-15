@@ -1,23 +1,28 @@
 import re
 
-class ValidationError(Exception):
-    pass
+class GameDataValidator:
+    @staticmethod
+    def validate_username(username):
+        if not isinstance(username, str) or len(username) < 3:
+            raise ValueError('Username must be a string with at least 3 characters.')
+        return True
 
-def validate_username(username):
-    if not isinstance(username, str):
-        raise ValidationError('Username must be a string')
-    if len(username) < 3 or len(username) > 20:
-        raise ValidationError('Username must be between 3 and 20 characters')
-    if not re.match('^[a-zA-Z0-9_]+$', username):
-        raise ValidationError('Username can only contain letters, numbers, and underscores')
-    return True
+    @staticmethod
+    def validate_score(score):
+        if not isinstance(score, int) or score < 0:
+            raise ValueError('Score must be a non-negative integer.')
+        return True
 
-# Example Usage
-if __name__ == '__main__':
-    usernames = ['valid_user', 'us', 'user_with_special@char', 12345, 'toolongusernamebeyondtwenty']
-    for username in usernames:
-        try:
-            validate_username(username)
-            print(f'Username "{username}" is valid.')
-        except ValidationError as e:
-            print(f'Username "{username}" is invalid: {e}')
+    @staticmethod
+    def validate_email(email):
+        email_regex = r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+'  
+        if not re.match(email_regex, email):
+            raise ValueError('Invalid email format.')
+        return True
+
+    @staticmethod
+    def validate_game_data(data):
+        GameDataValidator.validate_username(data.get('username'))
+        GameDataValidator.validate_score(data.get('score'))
+        GameDataValidator.validate_email(data.get('email'))
+        return True
