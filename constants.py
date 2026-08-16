@@ -1,24 +1,35 @@
-import math
+SCREEN_WIDTH: int = 800
+SCREEN_HEIGHT: int = 600
+FPS: int = 60
+PLAYER_SPEED: int = 5
+GRAVITY: float = 9.8
+COLORS: dict = {
+    'BLACK': (0, 0, 0),
+    'WHITE': (255, 255, 255),
+    'RED': (255, 0, 0),
+    'GREEN': (0, 255, 0),
+    'BLUE': (0, 0, 255),
+}
 
-class GameConstants:
-    GRAVITY = 9.81
-    MAX_PLAYERS = 100
-    DEFAULT_HEALTH = 100
-    PI = math.pi
-    MAX_SCORE = 1000
+# Game states
+class GameState:
+    MENU: str = 'menu'
+    PLAYING: str = 'playing'
+    GAME_OVER: str = 'game_over'
 
-    @staticmethod
-    def get_jump_height():
-        return 2 * GameConstants.DEFAULT_HEALTH / GameConstants.GRAVITY
+# Constants for game levels
+def get_level_constants(level: int) -> dict:
+    """Return constants based on level.
 
-    @staticmethod
-    def get_circle_area(radius):
-        return GameConstants.PI * (radius ** 2)
+    Args:
+        level (int): The level number.
 
-    @staticmethod
-    def get_max_health(player_count):
-        return GameConstants.DEFAULT_HEALTH * player_count
-
-    @staticmethod
-    def get_initial_scores():
-        return [0] * GameConstants.MAX_PLAYERS
+    Returns:
+        dict: A dictionary of level-specific constants.
+    """
+    if level == 1:
+        return {'enemy_count': 5, 'difficulty': 'easy'}
+    elif level == 2:
+        return {'enemy_count': 10, 'difficulty': 'medium'}
+    else:
+        return {'enemy_count': 15, 'difficulty': 'hard'}
