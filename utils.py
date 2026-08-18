@@ -1,38 +1,26 @@
-import json
-import random
-from typing import List, Dict, Any
+import time
+import requests
 
-class GameDataHandler:
-    def __init__(self, filename: str):
-        self.filename = filename
-        self.data = self.load_data()
+class NetworkError(Exception):
+    pass
 
-    def load_data(self) -> List[Dict[str, Any]]:
+
+def retry_network_call(func, retries=3, delay=2, *args, **kwargs):
+    for attempt in range(retries):
         try:
-            with open(self.filename, 'r') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f'Error loading data: {e}')
-            return []
+            response = func(*args, **kwargs)
+            if response.status_code == 200:
+                return response
+            raise NetworkError(f'Error: {response.status_code}')
+        except (requests.exceptions.RequestException, NetworkError) as e:
+            print(f'Attempt {attempt + 1} failed: {e}')
+            time.sleep(delay)
+    raise Exception('All retry attempts failed')
 
-    def save_data(self) -> None:
-        with open(self.filename, 'w') as f:
-            json.dump(self.data, f, indent=4)
 
-    def get_random_game(self) -> Dict[str, Any]:
-        if self.data:
-            return random.choice(self.data)
-        return {}  
+def get_game_data(url):
+    return retry_network_call(requests.get, url=url)
 
-    def add_game(self, game: Dict[str, Any]) -> None:
-        self.data.append(game)
-        self.save_data()
-
-    def find_game_by_name(self, name: str) -> List[Dict[str, Any]]:
-        return [game for game in self.data if game.get('name') == name]
-
-# Example of usage
-# handler = GameDataHandler('games.json')
-# handler.add_game({'name': 'Super Adventure', 'genre': 'RPG'})
-# print(handler.get_random_game())
-# print(handler.find_game_by_name('Super Adventure'))
+# Example usage:
+# response = get_game_data('https://api.example.com/game')
+# print(response.json())
