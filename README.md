@@ -1,49 +1,47 @@
-# Python Utils 58
+# python-utils-58
 
-Python Utils 58 is a collection of utility functions and classes designed for gaming developers. Its purpose is to streamline common tasks, such as game state management, input processing, and asset handling, significantly enhancing the efficiency and effectiveness of game development in Python.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+python-utils-58 is a Python package that delivers practical utilities for game development and modding. The library includes functions for handling game mechanics efficiently while keeping dependencies minimal.
 
 ## Features
 
-- **State Management**: Easily manage and switch between different game states (e.g., menu, playing, paused) with an intuitive state machine implementation.
-- **Input Handling**: Simplified input management that supports keyboard, mouse, and game controller inputs, allowing for smoother gameplay experiences.
-- **Resource Loader**: A robust asset management system that makes loading and unloading textures, sounds, and other game assets painless and efficient.
-- **Collision Detection**: Pre-built functions to handle basic collision detection, making it easier to implement physics without diving into complex math.
+- Weighted random selection system for loot, spawns, and AI behaviors
+- 2D vector operations with performance optimizations for real-time applications
+- Simple entity pooling to reduce object allocation during gameplay
+- JSON and pickle based save system with versioning support
 
 ## Installation
 
-To install Python Utils 58, you can clone the repository and run the setup script. Here are the commands to get started:
+Clone the repository and install the package:
 
 ```bash
-git clone https://github.com/yourusername/python-utils-58.git
+git clone https://github.com/Developer/python-utils-58.git
 cd python-utils-58
-pip install .
+pip install -e .
 ```
 
-## Basic Usage Example
-
-Here’s a quick example of how to use Python Utils 58 to manage game states:
+## Usage
 
 ```python
-from python_utils import StateManager
+from python_utils_58 import weighted_choice, Vector2, EntityPool
 
-# Create a state manager instance
-state_manager = StateManager()
+# Weighted selection for game drops
+loot_table = ['gold', 'potion', 'sword']
+weights = [60, 30, 10]
+drop = weighted_choice(loot_table, weights)
+print(f"Player received: {drop}")
 
-# Define a simple game state
-def main_game_state():
-    print("Welcome to the Game!")
+# Basic vector math
+velocity = Vector2(5.0, 0.0)
+position = Vector2(100, 200) + velocity
 
-# Add the game state to the manager
-state_manager.add_state("main_game", main_game_state)
-
-# Switch to the desired state
-state_manager.switch_state("main_game")
+# Entity management
+pool = EntityPool()
+entity = pool.get()
+pool.release(entity)
 ```
-
-This example illustrates how you can define and manage different game states using the StateManager class, thereby enhancing the flow and structure of your game.
-
-![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
