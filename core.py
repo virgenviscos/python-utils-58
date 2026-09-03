@@ -1,36 +1,42 @@
-import time
-import random
+import json
+import os
+from typing import Any, Dict
 
-class Game:
-    def __init__(self):
-        self.score = 0
-        self.high_score = 0
-        self.running = True
+class ConfigLoader:
+    """Dynamic attribute-based configuration loader for game settings."""
+    def __init__(self, file_path: str, defaults: Dict[str, Any]):
+        self._path = file_path
+        self._data = defaults.copy()
+        self._load()
 
-    def play_round(self):
-        start_time = time.time()
-        outcome = random.choice([True, False])
-        if outcome:
-            self.score += 10
-            print('Round won!')
-        else:
-            print('Round lost!')
-        elapsed_time = time.time() - start_time
-        print(f'Time taken for round: {elapsed_time:.2f} seconds')
-        self.update_high_score()
+    def _load(self) -> None:
+        if os.path.exists(self._path):
+            with open(self._path, 'r') as f:
+                try:
+                    self._data.update(json.load(f))
+                except json.JSONDecodeError:
+                    pass
 
-    def update_high_score(self):
-        if self.score > self.high_score:
-            self.high_score = self.score
-            print('New high score!')
+    def __getattr__(self, name: str) -> Any:
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"Key '{name}' not found in configuration")
 
-    def reset_game(self):
-        print('Resetting game...')
-        self.score = 0
+    def __getitem__(self, key: str) -> Any:
+        return self._data.get(key)
 
-    def start(self):
-        while self.running:
-            self.play_round()
-            if input('Play another round? (y/n): ').lower() != 'y':
-                self.running = False
-        print(f'Final score: {self.score}, High score: {self.high_score}')
+    def save(self) -> None:
+        with open(self._path, 'w') as f:
+            json.dump(self._data, f, indent=4)
+
+    def update(self, key: str, value: Any) -> None:
+        self._data[key] = value
+
+def get_game_config(path: str = "settings.json") -> ConfigLoader:
+    defaults = {
+        "resolution": [1920, 1080],
+        "vsync": True,
+        "master_volume": 0.8,
+        "player_name": "Hero"
+    }
+    return ConfigLoader(path, defaults)
