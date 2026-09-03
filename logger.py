@@ -1,36 +1,32 @@
 import logging
 import os
+from logging.handlers import RotatingFileHandler
 
-class CustomLogger:
-    def __init__(self, name):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        handler = logging.FileHandler(f'{name}.log')
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+def get_gaming_logger(name='game_engine', log_file='game.log'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter(
+        '[%(asctime)s] [LEVEL:%(levelname)s] [MODULE:%(name)s] >> %(message)s',
+        datefmt='%H:%M:%S'
+    )
 
-    def log_info(self, message):
-        self.logger.info(message)
+    # Unusual approach: size-based rotation with a memory-efficient 1MB limit
+    handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=1024*1024, 
+        backupCount=5
+    )
+    
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
+    # Console output for real-time development debugging
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+    
+    return logger
 
-    def log_warning(self, message):
-        self.logger.warning(message)
-
-    def log_error(self, message):
-        self.logger.error(message)
-        self.handle_error(message)
-
-    def handle_error(self, message):
-        try:
-            with open('error_log.txt', 'a') as f:
-                f.write(f'ERROR: {message}\n')
-        except Exception as e:
-            self.logger.critical(f'Failed to write to error_log.txt: {e}')
-
-    def log_edge_case(self, case):
-        if case is None:
-            self.log_warning('Received None as edge case input')
-        elif not isinstance(case, (int, str)):
-            self.log_error(f'Invalid case type: {type(case)}')
-        else:
-            self.log_info(f'Logging edge case: {case}')
+# Quick patch for immediate usage in the engine
+game_logger = get_gaming_logger()
