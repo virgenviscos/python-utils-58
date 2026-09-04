@@ -1,75 +1,35 @@
-from collections import defaultdict
-from typing import List, Dict, Any, Callable
+import math
+import random
+from typing import Any, Iterable, List
 
-def create_gaming_data_handler() -> Callable:
-    state = {
-        'total_score': 0,
-        'combos': {},
-        'inventory': defaultdict(int),
-        'events': []
-    }
+def lerp_range(start: float, end: float, steps: int) -> List[float]:
+    return [start + (end - start) * (i / (steps - 1)) for i in range(steps)]
 
-    def handler(command: str, *args) -> Any:
-        if command == 'add_score':
-            amount = args[0] if args else 0
-            state['total_score'] += amount
-            state['events'].append(('score', amount))
-            return state['total_score']
-        elif command == 'apply_combo':
-            combo_type = args[0] if args else 'default'
-            multiplier = args[1] if len(args) > 1 else 2
-            if combo_type in state['combos']:
-                state['combos'][combo_type] += 1
-            else:
-                state['combos'][combo_type] = 1
-            bonus = state['combos'][combo_type] * multiplier
-            state['total_score'] += bonus
-            state['events'].append(('combo', combo_type, bonus))
-            return bonus
-        elif command == 'add_item':
-            item = args[0] if args else 'unknown'
-            quantity = args[1] if len(args) > 1 else 1
-            state['inventory'][item] += quantity
-            state['events'].append(('item', item, quantity))
-            return state['inventory'][item]
-        elif command == 'get_stats':
-            return {
-                'total_score': state['total_score'],
-                'active_combos': dict(state['combos']),
-                'inventory': dict(state['inventory']),
-                'event_count': len(state['events'])
-            }
-        elif command == 'reset':
-            state['total_score'] = 0
-            state['combos'].clear()
-            state['inventory'].clear()
-            state['events'].clear()
-            return 'reset complete'
-        return 'unknown command'
+def clamp(value: float, min_val: float, max_val: float) -> float:
+    return max(min_val, min(value, max_val))
 
-    return handler
+def shuffle_weighted(items: List[Any], weights: List[float]) -> List[Any]:
+    indices = list(range(len(items)))
+    shuffled = []
+    while indices:
+        choice = random.choices(indices, weights=[weights[i] for i in indices])[0]
+        shuffled.append(items[choice])
+        indices.remove(choice)
+    return shuffled
 
-def process_raw_gaming_data(data_list: List[Dict[str, Any]]) -> Dict[str, Any]:
-    handler = create_gaming_data_handler()
-    for entry in data_list:
-        cmd = entry.get('command')
-        args = entry.get('args', [])
-        if cmd:
-            handler(cmd, *args)
-    return handler('get_stats')
+def grid_snap(value: float, step: float) -> float:
+    return round(value / step) * step
 
-def calculate_win_probability(player_stats: Dict[str, float], opponent_stats: Dict[str, float]) -> float:
-    if not player_stats or not opponent_stats:
-        return 0.5
-    ratios = []
-    for key in set(player_stats.keys()) & set(opponent_stats.keys()):
-        if opponent_stats.get(key, 0) > 0:
-            ratios.append(player_stats[key] / opponent_stats[key])
-    if not ratios:
-        return 0.5
-    product = 1.0
-    for r in ratios:
-        product *= r
-    geo_mean = product ** (1 / len(ratios))
-    prob = 1 / (1 + (1 / geo_mean))
-    return min(max(prob, 0.0), 1.0)
+def polar_to_cartesian(radius: float, angle_rad: float):
+    return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
+
+def hex_to_rgb(hex_code: str) -> tuple:
+    hex_code = hex_code.lstrip('#')
+    return tuple(int(hex_code[i:i+2], 16) for i in (0, 2, 4))
+
+def distance_sq(p1: tuple, p2: tuple) -> float:
+    return (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2
+
+def chunk_list(data: Iterable, size: int) -> List[List[Any]]:
+    it = iter(data)
+    return [list(chunk) for chunk in iter(lambda: list(zip(*[it]*size)), [])]
