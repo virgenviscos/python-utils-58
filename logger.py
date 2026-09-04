@@ -1,32 +1,35 @@
 import logging
-import os
 from logging.handlers import RotatingFileHandler
+import os
 
-def get_gaming_logger(name='game_engine', log_file='game.log'):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter(
-        '[%(asctime)s] [LEVEL:%(levelname)s] [MODULE:%(name)s] >> %(message)s',
-        datefmt='%H:%M:%S'
-    )
+class GamingLogger:
+    def __init__(self, name='python-utils-58', log_dir='logs'):
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+        
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)8s | %(message)s',
+            datefmt='%H:%M:%S'
+        )
 
-    # Unusual approach: size-based rotation with a memory-efficient 1MB limit
-    handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=1024*1024, 
-        backupCount=5
-    )
-    
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    # Console output for real-time development debugging
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-    
-    return logger
+        file_path = os.path.join(log_dir, f'{name}.log')
+        handler = RotatingFileHandler(
+            file_path, 
+            maxBytes=1024 * 1024 * 5, 
+            backupCount=3
+        )
+        
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        self.logger.addHandler(console)
 
-# Quick patch for immediate usage in the engine
-game_logger = get_gaming_logger()
+    def get_logger(self):
+        return self.logger
+
+logger = GamingLogger().get_logger()
