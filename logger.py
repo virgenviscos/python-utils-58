@@ -2,34 +2,25 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 
-class GamingLogger:
-    def __init__(self, name='python-utils-58', log_dir='logs'):
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)8s | %(message)s',
-            datefmt='%H:%M:%S'
+def setup_game_logger(name='gaming_engine', log_file='game_state.log', max_bytes=1048576, backup_count=3):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    if log_file:
+        file_handler = RotatingFileHandler(
+            log_file, 
+            maxBytes=max_bytes, 
+            backupCount=backup_count
         )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    
+    return logger
 
-        file_path = os.path.join(log_dir, f'{name}.log')
-        handler = RotatingFileHandler(
-            file_path, 
-            maxBytes=1024 * 1024 * 5, 
-            backupCount=3
-        )
-        
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        self.logger.addHandler(console)
-
-    def get_logger(self):
-        return self.logger
-
-logger = GamingLogger().get_logger()
+log = setup_game_logger()
