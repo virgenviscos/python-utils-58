@@ -1,35 +1,41 @@
-import time
 import functools
+import time
 import random
-from typing import Callable, Any, Optional
 
-def retry_network_op(max_attempts: int = 3, backoff_factor: float = 0.5):
-    def decorator(func: Callable):
+class GameResourceOrchestrator:
+    def __init__(self, resource_pool=None):
+        self._pool = resource_pool or set()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.purge_stale_entities()
+
+    def purge_stale_entities(self):
+        self._pool = {e for e in self._pool if hasattr(e, 'is_alive') and e.is_alive()}
+
+    def execute_throttled(self, func, interval=0.05):
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            last_ex = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    if attempt < max_attempts - 1:
-                        sleep_time = backoff_factor * (2 ** attempt) + random.uniform(0, 0.1)
-                        time.sleep(sleep_time)
-            raise last_ex
+        def wrapper(*args, **kwargs):
+            time.sleep(interval * random.random())
+            return func(*args, **kwargs)
         return wrapper
-    return decorator
 
-def packet_resilience(max_retries: int = 5):
-    def outer(func: Callable):
-        @functools.wraps(func)
-        def inner(*args: Any, **kwargs: Any) -> Any:
-            for i in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except ConnectionError:
-                    if i == max_retries - 1:
-                        raise
-                    time.sleep(0.1 * (i + 1))
-        return inner
-    return outer
+def validate_game_state(state_data):
+    required = {'player_id', 'hp', 'coords'}
+    return all(key in state_data for key in required)
+
+def transform_coordinates(func):
+    """Decorator for coordinate normalization in 2D space."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        result = func(*args, **kwargs)
+        if isinstance(result, tuple) and len(result) == 2:
+            return (round(result[0], 2), round(result[1], 2))
+        return result
+    return wrapper
+
+class EntityFactory:
+    def create_unique_id(self):
+        return f"ent_{int(time.time() * 1000)}_{random.randint(100, 999)}"
