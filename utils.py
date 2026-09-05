@@ -1,26 +1,35 @@
 import time
-import requests
+import functools
+import random
+from typing import Callable, Any, Optional
 
-class NetworkError(Exception):
-    pass
+def retry_network_op(max_attempts: int = 3, backoff_factor: float = 0.5):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_ex = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    if attempt < max_attempts - 1:
+                        sleep_time = backoff_factor * (2 ** attempt) + random.uniform(0, 0.1)
+                        time.sleep(sleep_time)
+            raise last_ex
+        return wrapper
+    return decorator
 
-
-def retry_network_call(func, retries=3, delay=2, *args, **kwargs):
-    for attempt in range(retries):
-        try:
-            response = func(*args, **kwargs)
-            if response.status_code == 200:
-                return response
-            raise NetworkError(f'Error: {response.status_code}')
-        except (requests.exceptions.RequestException, NetworkError) as e:
-            print(f'Attempt {attempt + 1} failed: {e}')
-            time.sleep(delay)
-    raise Exception('All retry attempts failed')
-
-
-def get_game_data(url):
-    return retry_network_call(requests.get, url=url)
-
-# Example usage:
-# response = get_game_data('https://api.example.com/game')
-# print(response.json())
+def packet_resilience(max_retries: int = 5):
+    def outer(func: Callable):
+        @functools.wraps(func)
+        def inner(*args: Any, **kwargs: Any) -> Any:
+            for i in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except ConnectionError:
+                    if i == max_retries - 1:
+                        raise
+                    time.sleep(0.1 * (i + 1))
+        return inner
+    return outer
