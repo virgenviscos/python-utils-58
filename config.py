@@ -1,70 +1,49 @@
 import json
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Union
 
-class GameConfig:
-    DEFAULTS: Dict[str, Any] = {
-        "window": {
-            "width": 1024,
-            "height": 768,
-            "title": "Epic Game"
-        },
-        "player": {
-            "speed": 5.0,
-            "health": 100,
-            "jump_height": 10
-        },
-        "game": {
-            "max_level": 10,
-            "difficulty": "medium",
-            "enable_sound": True
-        }
-    }
+class ConfigProxy(dict):
+    """Hierarchical config proxy supporting default fallbacks and attribute access."""
+    
+    def __init__(self, defaults: Dict[str, Any], data: Dict[str, Any] = None):
+        super().__init__()
+        self._defaults = defaults
+        if data:
+            self.update(data)
 
-    def __init__(self, config_file: Optional[str] = None) -> None:
-        self._config: Dict[str, Any] = self._deepcopy(self.DEFAULTS)
-        if config_file:
-            self.load(config_file)
+    def __getitem__(self, item: str) -> Any:
+        val = super().get(item, self._defaults.get(item))
+        if val is None and item not in self._defaults and item not in self:
+            raise KeyError(f"Setting '{item}' does not exist in configuration.")
+        
+        default_sub = self._defaults.get(item, {})
+        if isinstance(val, dict):
+            def_dict = default_sub if isinstance(default_sub, dict) else {}
+            return ConfigProxy(def_dict, val)
+        return val
 
-    def _deepcopy(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        return {k: self._deepcopy(v) if isinstance(v, dict) else v for k, v in d.items()}
-
-    def load(self, config_file: str) -> None:
+    def __getattr__(self, item: str) -> Any:
         try:
-            with open(config_file, "r", encoding="utf-8") as f:
-                loaded_config = json.load(f)
-            self._merge_configs(self._config, loaded_config)
-        except (FileNotFoundError, json.JSONDecodeError, IOError):
+            return self[item]
+        except KeyError as e:
+            raise AttributeError(e) from None
+
+
+DEFAULT_GAMING_SETTINGS: Dict[str, Any] = {
+    "display": {"width": 1920, "height": 1080, "fov": 90, "vsync": True},
+    "audio": {"master_volume": 0.8, "sfx_volume": 1.0, "bgm_volume": 0.6},
+    "gameplay": {"difficulty": "hardcore", "auto_save_interval": 300},
+    "keybinds": {"primary_attack": "mouse1", "dash": "space", "inventory": "tab"}
+}
+
+
+def load_config(filepath: Union[str, Path] = "config.json") -> ConfigProxy:
+    path = Path(filepath)
+    user_config = {}
+    if path.exists() and path.is_file():
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                user_config = json.load(file)
+        except json.JSONDecodeError:
             pass
-
-    def _merge_configs(self, base: Dict[str, Any], override: Dict[str, Any]) -> None:
-        for key, value in override.items():
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                self._merge_configs(base[key], value)
-            else:
-                base[key] = value
-
-    def get(self, path: str, default: Any = None) -> Any:
-        keys = path.split(".")
-        current = self._config
-        for key in keys:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
-            else:
-                return default
-        return current
-
-    def set(self, path: str, value: Any) -> None:
-        keys = path.split(".")
-        current = self._config
-        for key in keys[:-1]:
-            if key not in current or not isinstance(current[key], dict):
-                current[key] = {}
-            current = current[key]
-        current[keys[-1]] = value
-
-    def to_dict(self) -> Dict[str, Any]:
-        return self._deepcopy(self._config)
-
-    def save(self, config_file: str) -> None:
-        with open(config_file, "w", encoding="utf-8") as f:
-            json.dump(self._config, f, indent=2)
+    return ConfigProxy(DEFAULT_GAMING_SETTINGS, user_config)
