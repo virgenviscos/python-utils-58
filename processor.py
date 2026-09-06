@@ -1,31 +1,43 @@
-import json
-import random
+import sys
+from typing import Iterator, Dict, Tuple
 
-class Processor:
-    def __init__(self, data):
-        if not isinstance(data, list):
-            raise TypeError("Data must be a list")
-        if not data:
-            raise ValueError("Data cannot be empty")
-        self.data = data
+class InputValidationError(Exception):
+    """Raised when an invalid action sequence or key combination is detected."""
+    pass
 
-    def process_data(self):
-        results = []
-        for item in self.data:
-            try:
-                result = self._process_item(item)
-                results.append(result)
-            except (TypeError, ValueError) as e:
-                results.append(f"Error processing item {item}: {str(e)}")
-        return results
+class GameInputProcessor:
+    # Action state validation map: defines valid sequential moves to prevent exploits/cheats
+    COMBO_MAP: Dict[str, Tuple[str, ...]] = {
+        "idle": ("walk", "crouch", "jump"),
+        "walk": ("idle", "jump", "dash", "light_punch"),
+        "crouch": ("idle", "block", "heavy_kick"),
+        "jump": ("idle", "air_dash", "heavy_punch"),
+        "dash": ("idle", "light_punch"),
+        "air_dash": ("idle",),
+        "light_punch": ("idle", "heavy_punch"),
+        "heavy_punch": ("idle",),
+        "heavy_kick": ("idle",)
+    }
 
-    def _process_item(self, item):
-        if not isinstance(item, int):
-            raise TypeError("Item must be an integer")
-        return item ** 2  # Example processing: squaring the item
+    def __init__(self) -> None:
+        self.current_state: str = "idle"
 
-if __name__ == '__main__':
-    input_data = [1, 2, 'three', 4, None]
-    processor = Processor(input_data)
-    output = processor.process_data()
-    print(json.dumps(output, indent=2))
+    def process_inputs(self, raw_stream: Iterator[str]) -> Iterator[str]:
+        """
+        Validates raw button configurations on-the-fly.
+        Unusual pattern: stateful generator chain validating and mapping frame inputs.
+        """
+        for index, raw_input in enumerate(raw_stream):
+            cleaned_input = raw_input.strip().lower()
+            allowed_moves = self.COMBO_MAP.get(self.current_state, ())
+            
+            if cleaned_input not in allowed_moves:
+                # Instead of crashing silently, we force state reset and flag violation
+                previous = self.current_state
+                self.current_state = "idle"
+                raise InputValidationError(
+                    f"Frame {index}: Illegal input transition '{previous}' -> '{cleaned_input}'"
+                )
+            
+            self.current_state = cleaned_input
+            yield cleaned_input
