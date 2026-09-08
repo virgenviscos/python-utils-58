@@ -1,59 +1,38 @@
+import random
 import time
-from typing import Generator, Dict, Any, Tuple, Optional
+from functools import wraps
 
-class ComboEvaluator:
-    """
-    An unusual dynamic evaluator tracking timed player button inputs
-    against a dictionary of registerable combo sequences.
-    """
-    def __init__(self, combos: Dict[Tuple[str, ...], str]):
-        self.combos = combos
-        self.input_history: list[Tuple[str, float]] = []
+def jitter_delay(min_ms=50, max_ms=250):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            time.sleep(random.uniform(min_ms, max_ms) / 1000.0)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
-    def register_input(self, button: str, window_seconds: float = 1.2) -> Optional[str]:
-        """
-        Registers a button press, trims expired historical entries,
-        and returns a combo match if one is successfully recognized.
-        """
-        now = time.time()
-        self.input_history.append((button, now))
-        
-        # Filter out inputs older than the active window
-        self.input_history = [
-            (btn, t) for btn, t in self.input_history
-            if now - t <= window_seconds
-        ]
-        
-        sequence = tuple(btn for btn, _ in self.input_history)
-        for length in range(len(sequence), 0, -1):
-            sub_seq = sequence[-length:]
-            if sub_seq in self.combos:
-                self.input_history.clear()
-                return self.combos[sub_seq]
-        return None
+def loot_roll(chance):
+    return random.random() < chance
 
-def tick_generator() -> Generator[float, float, None]:
-    """
-    A delta-time generator designed for tick loops.
-    Allows dynamic time-dilation scaling via generator .send().
-    """
-    last_time = time.time()
-    time_scale = 1.0
-    while True:
-        current_time = time.time()
-        dt = (current_time - last_time) * time_scale
-        last_time = current_time
-        new_scale = yield dt
-        if new_scale is not None:
-            time_scale = float(new_scale)
+def format_stats(data: dict, prefix: str = 'Gamer_'):
+    return {f"{prefix}{k.upper()}": v for k, v in data.items()}
 
-def calculate_damage_chaos(level_diff: int, luck: float) -> float:
-    """
-    Calculates a non-linear damage multiplier using a chaotic logistic map,
-    giving high luck systems a deterministic but volatile critical chance.
-    """
-    r = 3.5 + (max(0.0, min(1.0, luck)) * 0.49)
-    x = 0.5 + (max(-40, min(40, level_diff)) * 0.01)
-    for _ in range(3):
-        x = r * x * (1.0 - x)
-    return float(round(1.0 + abs(x), 2))
+def throttle_events(interval):
+    last_called = [0.0]
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            elapsed = time.time() - last_called[0]
+            if elapsed > interval:
+                last_called[0] = time.time()
+                return func(*args, **kwargs)
+            return None
+        return wrapper
+    return decorator
+
+class EntityPool:
+    def __init__(self, size=10):
+        self._pool = [None] * size
+    def get_slot(self):
+        idx = self._pool.index(None) if None in self._pool else -1
+        return idx
