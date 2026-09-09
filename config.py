@@ -1,59 +1,37 @@
-import os
 import json
-from collections import ChainMap
+import os
 from typing import Any, Dict
 
-class ConfigField:
-    def __init__(self, default: Any, type_cast: type):
-        self.default = default
-        self.type_cast = type_cast
+class ConfigLoader:
+    def __init__(self, file_path: str, defaults: Dict[str, Any]):
+        self.path = file_path
+        self.data = defaults
+        self._sync()
 
-    def __set_name__(self, owner, name):
-        self.name = name
+    def _sync(self) -> None:
+        if os.path.exists(self.path):
+            with open(self.path, 'r') as f:
+                try:
+                    user_data = json.load(f)
+                    self.data.update(user_data)
+                except json.JSONDecodeError:
+                    pass
+        else:
+            self.save()
 
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        val = instance._resolved.get(self.name, self.default)
-        try:
-            return self.type_cast(val)
-        except (ValueError, TypeError):
-            return self.default
+    def save(self) -> None:
+        with open(self.path, 'w') as f:
+            json.dump(self.data, f, indent=4)
 
-class GameConfig:
-    """Dynamic configuration loader with profiles for gaming workloads."""
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.data.get(key, fallback)
 
-    PRESETS = {
-        "potato": {"fps_limit": 30, "fov": 70, "ray_tracing": False, "texture_quality": "low"},
-        "esports": {"fps_limit": 360, "fov": 103, "ray_tracing": False, "texture_quality": "medium"},
-        "ultra": {"fps_limit": 144, "fov": 90, "ray_tracing": True, "texture_quality": "ultra"}
-    }
+    def set(self, key: str, value: Any) -> None:
+        self.data[key] = value
+        self.save()
 
-    fps_limit = ConfigField(60, int)
-    fov = ConfigField(90, int)
-    ray_tracing = ConfigField(False, lambda x: str(x).lower() in ("true", "1", "yes"))
-    texture_quality = ConfigField("medium", str)
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
 
-    def __init__(self, preset: str = "esports", overrides: Dict[str, Any] = None):
-        self.preset = preset if preset in self.PRESETS else "esports"
-        self._overrides = overrides or {}
-        self._resolved = ChainMap(
-            self._overrides,
-            self._get_env_overrides(),
-            self.PRESETS[self.preset]
-        )
-
-    def _get_env_overrides(self) -> Dict[str, Any]:
-        prefix = "GAME_"
-        return {
-            key[len(prefix):].lower(): val
-            for key, val in os.environ.items()
-            if key.startswith(prefix)
-        }
-
-    def load_json(self, json_str: str) -> None:
-        try:
-            data = json.loads(json_str)
-            self._overrides.update(data)
-        except json.JSONDecodeError:
-            pass
+    def __repr__(self) -> str:
+        return f"<ConfigLoader loaded={list(self.data.keys())}>"
