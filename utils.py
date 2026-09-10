@@ -2,40 +2,37 @@ import functools
 import time
 import random
 
-class GameResourceOrchestrator:
-    def __init__(self, resource_pool=None):
-        self._pool = resource_pool or set()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.purge_stale_entities()
-
-    def purge_stale_entities(self):
-        self._pool = {e for e in self._pool if hasattr(e, 'is_alive') and e.is_alive()}
-
-    def execute_throttled(self, func, interval=0.05):
+def gaming_cooldown(seconds):
+    def decorator(func):
+        cache = {}
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            time.sleep(interval * random.random())
+            now = time.time()
+            last_called = cache.get(func.__name__, 0)
+            if now - last_called < seconds:
+                return None
+            cache[func.__name__] = now
             return func(*args, **kwargs)
         return wrapper
+    return decorator
 
-def validate_game_state(state_data):
-    required = {'player_id', 'hp', 'coords'}
-    return all(key in state_data for key in required)
+class EntityPool:
+    def __init__(self, size):
+        self._entities = [f"ent_{i}" for i in range(size)]
+        self._active = set()
 
-def transform_coordinates(func):
-    """Decorator for coordinate normalization in 2D space."""
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        if isinstance(result, tuple) and len(result) == 2:
-            return (round(result[0], 2), round(result[1], 2))
-        return result
-    return wrapper
+    def spawn(self):
+        available = [e for e in self._entities if e not in self._active]
+        if not available:
+            return None
+        choice = random.choice(available)
+        self._active.add(choice)
+        return choice
 
-class EntityFactory:
-    def create_unique_id(self):
-        return f"ent_{int(time.time() * 1000)}_{random.randint(100, 999)}"
+    def despawn(self, entity_id):
+        if entity_id in self._active:
+            self._active.remove(entity_id)
+
+@gaming_cooldown(1.5)
+def trigger_ability(name):
+    return f"ability {name} cast successfully"
