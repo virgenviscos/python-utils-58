@@ -1,35 +1,41 @@
-import math
-from typing import Final, Tuple
+from typing import Generic, TypeVar, Final, Dict, Any
 
-# Gaming math primitives for pixel-perfect physics
-PIXEL_RATIO: Final[float] = 1.0
-GRAVITY_CONSTANT: Final[float] = 9.81
+N = TypeVar('N', int, float)
 
-# Directional vectors for grid-based movement
-DIRECTIONS: Final[dict[str, Tuple[int, int]]] = {
-    'UP': (0, -1),
-    'DOWN': (0, 1),
-    'LEFT': (-1, 0),
-    'RIGHT': (1, 0)
+class ScalableStatic(Generic[N]):
+    """A game constant that remains immutable but can spawn scaled variants.
+
+    Perfect for balancing damage scaling or physics constants across game difficulties.
+    """
+    def __init__(self, base_value: N) -> None:
+        object.__setattr__(self, "_base", base_value)
+
+    @property
+    def base(self) -> N:
+        """The pristine, unmutated root value of this game metric."""
+        return self._base
+
+    def scale(self, factor: float) -> float:
+        """Calculate a temporary variant scaled by game-loop dynamics."""
+        return float(self._base * factor)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError("Denied: Static game elements must not be mutated.")
+
+    def __repr__(self) -> str:
+        return f"ScalableStatic(base={self._base})"
+
+# Core engine & environment mechanics
+GRAVITY: Final[ScalableStatic[float]] = ScalableStatic(-9.81)
+TICK_RATE_HZ: Final[int] = 60
+
+# Player core attributes
+BASE_STAMINA: Final[ScalableStatic[int]] = ScalableStatic(100)
+DASH_COOLDOWN_SEC: Final[ScalableStatic[float]] = ScalableStatic(1.5)
+
+# Global lookup registry for debugging sandbox modes
+GAME_REGISTRY: Final[Dict[str, ScalableStatic[Any]]] = {
+    "gravity": GRAVITY,
+    "stamina": BASE_STAMINA,
+    "dash_cooldown": DASH_COOLDOWN_SEC
 }
-
-def calculate_distance(p1: Tuple[int, int], p2: Tuple[int, int]) -> float:
-    """Euclidean distance using the hypotenuse for precision."""
-    return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
-
-def normalize_vector(vec: Tuple[float, float]) -> Tuple[float, float]:
-    """Force vector normalization for consistent movement speed."""
-    mag = math.sqrt(vec[0]**2 + vec[1]**2)
-    if mag == 0:
-        return (0.0, 0.0)
-    return (vec[0] / mag, vec[1] / mag)
-
-# Registry of game states
-GAME_STATES: Final[set[str]] = {
-    'MENU', 
-    'PLAYING', 
-    'PAUSED', 
-    'GAMEOVER'
-}
-
-VERSION_BUILD: Final[str] = '58-alpha'
