@@ -1,31 +1,37 @@
 import time
-from functools import wraps
+from typing import Callable, Any, Dict, List, Tuple
 
-class PerformanceLogger:
-    def __init__(self):
-        self.execution_times = []
 
-    def log_time(self, func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
-            result = func(*args, **kwargs)
-            end_time = time.time()
-            self.execution_times.append(end_time - start_time)
-            print(f'{func.__name__} executed in {end_time - start_time:.4f} seconds')
-            return result
-        return wrapper
+class GamingEventHandler:
+    def __init__(self) -> None:
+        self._routes: Dict[str, List[Tuple[Callable[..., Any], int]]] = {}
+        self._history: List[Tuple[float, str, Dict[str, Any]]] = []
 
-    def get_average_time(self):
-        return sum(self.execution_times) / len(self.execution_times) if self.execution_times else 0
+    def register(self, event_type: str, priority: int = 10):
+        def decorator(func: Callable[..., Any]):
+            if event_type not in self._routes:
+                self._routes[event_type] = []
+            self._routes[event_type].append((func, priority))
+            self._routes[event_type].sort(key=lambda item: item[1], reverse=True)
+            return func
+        return decorator
 
-performance_logger = PerformanceLogger()
+    def dispatch(self, event_type: str, **payload: Any) -> List[Any]:
+        results = []
+        if event_type not in self._routes:
+            return results
 
-@performance_logger.log_time
-def compute_heavy_task(a, b):
-    time.sleep(2)  # Simulating a heavy computation
-    return a + b
+        timestamp = time.time()
+        self._history.append((timestamp, event_type, payload))
+        if len(self._history) > 100:
+            self._history.pop(0)
 
-if __name__ == '__main__':
-    print(compute_heavy_task(5, 10))
-    print('Average execution time:', performance_logger.get_average_time())
+        for callback, _ in self._routes[event_type]:
+            res = callback(**payload)
+            results.append(res)
+        return results
+
+    def purge_history_before(self, cutoff_time: float) -> int:
+        initial_count = len(self._history)
+        self._history = [entry for entry in self._history if entry[0] >= cutoff_time]
+        return initial_count - len(self._history)
