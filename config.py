@@ -2,36 +2,33 @@ import json
 import os
 from typing import Any, Dict
 
-class ConfigLoader:
-    def __init__(self, file_path: str, defaults: Dict[str, Any]):
-        self.path = file_path
-        self.data = defaults
-        self._sync()
+class GameConfig:
+    def __init__(self, path: str = 'settings.json', defaults: Dict[str, Any] = None):
+        self.path = path
+        self.defaults = defaults or {}
+        self.settings = self._load()
 
-    def _sync(self) -> None:
-        if os.path.exists(self.path):
-            with open(self.path, 'r') as f:
-                try:
-                    user_data = json.load(f)
-                    self.data.update(user_data)
-                except json.JSONDecodeError:
-                    pass
-        else:
-            self.save()
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            self._save(self.defaults)
+            return self.defaults
+        with open(self.path, 'r') as f:
+            try:
+                data = json.load(f)
+                return {**self.defaults, **data}
+            except json.JSONDecodeError:
+                return self.defaults
 
-    def save(self) -> None:
+    def _save(self, data: Dict[str, Any]) -> None:
         with open(self.path, 'w') as f:
-            json.dump(self.data, f, indent=4)
+            json.dump(data, f, indent=4)
 
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self.data.get(key, fallback)
+    def __getattr__(self, name: str) -> Any:
+        return self.settings.get(name)
 
-    def set(self, key: str, value: Any) -> None:
-        self.data[key] = value
-        self.save()
-
-    def __getitem__(self, key: str) -> Any:
-        return self.data[key]
+    def update(self, key: str, value: Any) -> None:
+        self.settings[key] = value
+        self._save(self.settings)
 
     def __repr__(self) -> str:
-        return f"<ConfigLoader loaded={list(self.data.keys())}>"
+        return f"GameConfig(active_settings={list(self.settings.keys())})"
