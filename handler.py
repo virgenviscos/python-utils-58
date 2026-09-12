@@ -1,37 +1,40 @@
 import time
-from typing import Callable, Any, Dict, List, Tuple
+import collections
+from typing import Dict, Any, Callable
 
+class GameEventHandler:
+    def __init__(self):
+        self._registry: Dict[str, list] = collections.defaultdict(list)
+        self._tick_rate = 0.016
 
-class GamingEventHandler:
-    def __init__(self) -> None:
-        self._routes: Dict[str, List[Tuple[Callable[..., Any], int]]] = {}
-        self._history: List[Tuple[float, str, Dict[str, Any]]] = []
+    def register(self, event_type: str, callback: Callable):
+        self._registry[event_type].append(callback)
+        return self
 
-    def register(self, event_type: str, priority: int = 10):
-        def decorator(func: Callable[..., Any]):
-            if event_type not in self._routes:
-                self._routes[event_type] = []
-            self._routes[event_type].append((func, priority))
-            self._routes[event_type].sort(key=lambda item: item[1], reverse=True)
-            return func
-        return decorator
+    def emit(self, event_type: str, data: Any = None):
+        for callback in self._registry.get(event_type, []):
+            try:
+                callback(data)
+            except Exception as e:
+                print(f"fault in {event_type} sequence: {e}")
 
-    def dispatch(self, event_type: str, **payload: Any) -> List[Any]:
-        results = []
-        if event_type not in self._routes:
-            return results
+    def process_queue(self, queue: list):
+        start = time.perf_counter()
+        while queue:
+            evt = queue.pop(0)
+            self.emit(evt.get('type'), evt.get('payload'))
+            if time.perf_counter() - start > self._tick_rate:
+                break
 
-        timestamp = time.time()
-        self._history.append((timestamp, event_type, payload))
-        if len(self._history) > 100:
-            self._history.pop(0)
+class EntityStreamProcessor:
+    def __init__(self):
+        self.state = {}
 
-        for callback, _ in self._routes[event_type]:
-            res = callback(**payload)
-            results.append(res)
-        return results
+    def sanitize(self, raw_data: Dict[str, Any]):
+        return {k: v for k, v in raw_data.items() if v is not None}
 
-    def purge_history_before(self, cutoff_time: float) -> int:
-        initial_count = len(self._history)
-        self._history = [entry for entry in self._history if entry[0] >= cutoff_time]
-        return initial_count - len(self._history)
+    def sync_state(self, entity_id: str, patch: Dict[str, Any]):
+        current = self.state.get(entity_id, {})
+        current.update(self.sanitize(patch))
+        self.state[entity_id] = current
+        return current
