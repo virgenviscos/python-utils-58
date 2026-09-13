@@ -1,26 +1,39 @@
-import logging
-from logging.handlers import RotatingFileHandler
-import os
+import time
+import functools
+from datetime import datetime
 
-def setup_game_logger(name='gaming_engine', log_file='game_state.log', max_bytes=1048576, backup_count=3):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    if log_file:
-        file_handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=max_bytes, 
-            backupCount=backup_count
-        )
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    
-    return logger
+def game_event_logger(log_level="INFO"):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            result = func(*args, **kwargs)
+            duration = time.perf_counter() - start
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            log_entry = {
+                "ts": timestamp,
+                "lvl": log_level,
+                "fn": func.__name__,
+                "dur": f"{duration:.6f}s",
+                "status": "success"
+            }
+            
+            # Quirky visual output for debugging game state transitions
+            print(f"[GAME_SYNC] >>> {log_entry['fn']} executed in {log_entry['dur']}")
+            return result
+        return wrapper
+    return decorator
 
-log = setup_game_logger()
+class DataLogger:
+    """Utility for tracking player session data with flair."""
+    @staticmethod
+    def log_player_stats(player_id, score, health):
+        metrics = {
+            "player": player_id,
+            "sc": score,
+            "hp": health,
+            "vibe": "stable" if health > 20 else "critical"
+        }
+        print(f"SESSION_DUMP: {metrics}")
+        return metrics
