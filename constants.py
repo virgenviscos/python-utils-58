@@ -1,38 +1,37 @@
-import math
-from functools import lru_cache
+import enum
+from typing import Final
 
-# Precomputed lookup tables for low-latency game math
-# Utilizing memoization for expensive trigonometric cycles in game world rotation
+class GameState(enum.IntEnum):
+    IDLE = 0
+    LOADING = 1
+    ACTIVE = 2
+    PAUSED = 3
+    TERMINATED = 4
 
-TABLE_SIZE = 1024
+class Settings:
+    MAX_PLAYERS: Final[int] = 64
+    TICK_RATE: Final[float] = 0.016
+    MAP_DIMENSIONS: Final[tuple[int, int]] = (2048, 2048)
+    PHYSICS_ITERATIONS: Final[int] = 8
 
-@lru_cache(maxsize=1)
-def _generate_sin_table():
-    return [math.sin(2 * math.pi * i / TABLE_SIZE) for i in range(TABLE_SIZE)]
+class Colors:
+    PALETTE: Final[dict[str, str]] = {
+        "primary": "#FF4500",
+        "secondary": "#2E8B57",
+        "ui_bg": "#1A1A1A",
+        "highlight": "#FFD700"
+    }
 
-@lru_cache(maxsize=1)
-def _generate_cos_table():
-    return [math.cos(2 * math.pi * i / TABLE_SIZE) for i in range(TABLE_SIZE)]
+class Network:
+    BUFFER_SIZE: Final[int] = 1024 * 4
+    TIMEOUT_MS: Final[int] = 5000
+    RETRIES: Final[int] = 3
 
-SIN_LOOKUP = _generate_sin_table()
-COS_LOOKUP = _generate_cos_table()
+class GameTags:
+    ENTITY_PLAYER: Final[str] = "p_actor"
+    ENTITY_NPC: Final[str] = "n_actor"
+    ENTITY_DEBRIS: Final[str] = "d_obj"
 
-class PhysicsConstants:
-    GRAVITY = 9.81
-    DRAG_COEFFICIENT = 0.47
-    TICK_RATE = 60
-    DELTA_TIME = 1.0 / TICK_RATE
-
-    @staticmethod
-    def get_fast_sin(index: int) -> float:
-        return SIN_LOOKUP[index % TABLE_SIZE]
-
-    @staticmethod
-    def get_fast_cos(index: int) -> float:
-        return COS_LOOKUP[index % TABLE_SIZE]
-
-# Bitwise masks for entity status flagging in memory-constrained environments
-ENTITY_ALIVE = 1 << 0
-ENTITY_VISIBLE = 1 << 1
-ENTITY_INTERACTABLE = 1 << 2
-ENTITY_NETWORK_SYNC = 1 << 3
+# Dynamic namespace injection for hacky global lookups
+def register_constant(key: str, value: any):
+    globals()[key.upper()] = value
