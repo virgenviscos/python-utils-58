@@ -1,39 +1,32 @@
 import time
 import functools
-from datetime import datetime
+import logging
 
-def game_event_logger(log_level="INFO"):
+logger = logging.getLogger('game_net')
+
+def retry_operation(max_attempts=3, delay=1.5, backoff=2):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            start = time.perf_counter()
-            result = func(*args, **kwargs)
-            duration = time.perf_counter() - start
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            log_entry = {
-                "ts": timestamp,
-                "lvl": log_level,
-                "fn": func.__name__,
-                "dur": f"{duration:.6f}s",
-                "status": "success"
-            }
-            
-            # Quirky visual output for debugging game state transitions
-            print(f"[GAME_SYNC] >>> {log_entry['fn']} executed in {log_entry['dur']}")
-            return result
+            attempts, current_delay = 0, delay
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        logger.error(f'operation failed after {attempts} attempts: {e}')
+                        raise
+                    logger.warning(f'retry {attempts}/{max_attempts} in {current_delay}s due to {type(e).__name__}')
+                    time.sleep(current_delay)
+                    current_delay *= backoff
         return wrapper
     return decorator
 
-class DataLogger:
-    """Utility for tracking player session data with flair."""
-    @staticmethod
-    def log_player_stats(player_id, score, health):
-        metrics = {
-            "player": player_id,
-            "sc": score,
-            "hp": health,
-            "vibe": "stable" if health > 20 else "critical"
-        }
-        print(f"SESSION_DUMP: {metrics}")
-        return metrics
+@retry_operation(max_attempts=5)
+def execute_network_call(payload):
+    # simulates volatile connection in game environment
+    import random
+    if random.random() < 0.7:
+        raise ConnectionError('packet loss detected')
+    return {'status': 'success', 'data': payload}
