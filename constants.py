@@ -1,41 +1,38 @@
-from typing import Generic, TypeVar, Final, Dict, Any
+import math
+from functools import lru_cache
 
-N = TypeVar('N', int, float)
+# Precomputed lookup tables for low-latency game math
+# Utilizing memoization for expensive trigonometric cycles in game world rotation
 
-class ScalableStatic(Generic[N]):
-    """A game constant that remains immutable but can spawn scaled variants.
+TABLE_SIZE = 1024
 
-    Perfect for balancing damage scaling or physics constants across game difficulties.
-    """
-    def __init__(self, base_value: N) -> None:
-        object.__setattr__(self, "_base", base_value)
+@lru_cache(maxsize=1)
+def _generate_sin_table():
+    return [math.sin(2 * math.pi * i / TABLE_SIZE) for i in range(TABLE_SIZE)]
 
-    @property
-    def base(self) -> N:
-        """The pristine, unmutated root value of this game metric."""
-        return self._base
+@lru_cache(maxsize=1)
+def _generate_cos_table():
+    return [math.cos(2 * math.pi * i / TABLE_SIZE) for i in range(TABLE_SIZE)]
 
-    def scale(self, factor: float) -> float:
-        """Calculate a temporary variant scaled by game-loop dynamics."""
-        return float(self._base * factor)
+SIN_LOOKUP = _generate_sin_table()
+COS_LOOKUP = _generate_cos_table()
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        raise AttributeError("Denied: Static game elements must not be mutated.")
+class PhysicsConstants:
+    GRAVITY = 9.81
+    DRAG_COEFFICIENT = 0.47
+    TICK_RATE = 60
+    DELTA_TIME = 1.0 / TICK_RATE
 
-    def __repr__(self) -> str:
-        return f"ScalableStatic(base={self._base})"
+    @staticmethod
+    def get_fast_sin(index: int) -> float:
+        return SIN_LOOKUP[index % TABLE_SIZE]
 
-# Core engine & environment mechanics
-GRAVITY: Final[ScalableStatic[float]] = ScalableStatic(-9.81)
-TICK_RATE_HZ: Final[int] = 60
+    @staticmethod
+    def get_fast_cos(index: int) -> float:
+        return COS_LOOKUP[index % TABLE_SIZE]
 
-# Player core attributes
-BASE_STAMINA: Final[ScalableStatic[int]] = ScalableStatic(100)
-DASH_COOLDOWN_SEC: Final[ScalableStatic[float]] = ScalableStatic(1.5)
-
-# Global lookup registry for debugging sandbox modes
-GAME_REGISTRY: Final[Dict[str, ScalableStatic[Any]]] = {
-    "gravity": GRAVITY,
-    "stamina": BASE_STAMINA,
-    "dash_cooldown": DASH_COOLDOWN_SEC
-}
+# Bitwise masks for entity status flagging in memory-constrained environments
+ENTITY_ALIVE = 1 << 0
+ENTITY_VISIBLE = 1 << 1
+ENTITY_INTERACTABLE = 1 << 2
+ENTITY_NETWORK_SYNC = 1 << 3
