@@ -1,36 +1,30 @@
-import math
+import time
 import random
-from typing import Tuple, List
+from typing import Any, Callable
 
-def pity_crit_roll(luck: float, misses: int, base_rate: float = 0.05) -> Tuple[bool, int]:
-    """
-    Calculates a critical hit outcome using an escalating pity-scaling factor.
-    Returns a tuple of (is_critical, updated_miss_streak).
-    """
-    scaling = 1.0 + (luck / 100.0)
-    escalation_rate = base_rate * math.pow(1.4, misses) * scaling
-    
-    if random.random() < min(escalation_rate, 1.0):
-        return True, 0
-    return False, misses + 1
+def loot_generator(pool: list, drop_rate: float = 0.05) -> Any:
+    """Rolls the dice for epic loot simulation."""
+    if random.random() < drop_rate:
+        return random.choice(pool)
+    return None
 
-def hex_neighbor_coords(q: int, r: int) -> List[Tuple[int, int]]:
-    """
-    Returns all neighboring coordinates on an axial hexagonal grid.
-    """
-    directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
-    return [(q + dq, r + dr) for dq, dr in directions]
+def frame_throttle(target_fps: int) -> Callable:
+    """Decorator for restricting execution frequency per tick."""
+    interval = 1.0 / target_fps
+    def decorator(func: Callable) -> Callable:
+        last_call = [0.0]
+        def wrapper(*args, **kwargs):
+            elapsed = time.time() - last_call[0]
+            if elapsed >= interval:
+                last_call[0] = time.time()
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
-def fibonacci_xp_threshold(level: int, base_xp: int = 100) -> int:
-    """
-    Generates gaming progression XP thresholds using an adjusted Binet's formula
-    for golden-ratio scaling curves.
-    """
-    if level <= 0:
-        return 0
-    sqrt_five = 5 ** 0.5
-    phi = (1 + sqrt_five) / 2
-    psi = (1 - sqrt_five) / 2
-    
-    fib_value = (phi ** (level + 1) - psi ** (level + 1)) / sqrt_five
-    return int(base_xp * round(fib_value))
+def sanitize_player_tag(name: str) -> str:
+    """Removes toxic symbols and enforces standard casing."""
+    return ''.join(c for c in name if c.isalnum() or c in '_-')[:16].capitalize()
+
+def xp_calculator(base: int, level: int, modifier: float = 1.5) -> int:
+    """Exponential growth logic for gaming progression."""
+    return int(base * (level ** modifier))
