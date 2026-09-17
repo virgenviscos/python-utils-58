@@ -2,18 +2,17 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A lightweight Python utility library designed specifically for Pygame and Pyglet developers to streamline game state management and 2D physics calculations. It simplifies assets loading, vector mathematics, and frame-rate independent state transitions with minimal overhead.
+`python-utils-58` is a lightweight Python utility library designed to streamline game development workflows, handling coordinate math, grid navigation, and state serialization. It provides high-performance helpers for 2D grid manipulation and game loop timing, allowing indie developers to focus on gameplay mechanics rather than boilerplate code.
 
 ## Features
 
-* **Asset Pipeline:** Automated caching and optimized loading for sprites, audio sheets, and custom TTF fonts.
-* **Fast Vector Math:** Helper functions for 2D collision detection (AABB and Circle-Circle) optimized with NumPy integration.
-* **Frame-Rate Independent LERP:** Smooth interpolation functions for camera tracking and physics calculations regardless of engine FPS.
-* **Modular State Machine:** A clean, event-driven game state manager to handle transitions between menus, loading screens, and active gameplay.
+* **Fast 2D Grid & Pathfinding:** Optimized A* algorithm implementation and coordinate utilities tailored for tile-based 2D games.
+* **Game Loop Frame Rate Controller:** A precise delta-time calculator and FPS limiter to ensure consistent game speed across different hardware setups.
+* **Robust Save-State Serialization:** Secure binary and JSON compression utilities to handle game state saving and loading seamlessly.
 
 ## Installation
 
-Install the package directly from PyPI:
+Install the package directly from PyPI using pip:
 
 ```bash
 pip install python-utils-58
@@ -21,33 +20,29 @@ pip install python-utils-58
 
 ## Quick Start
 
-The following example demonstrates how to use the vector math and state interpolation modules in your game loop:
+Here is a quick example demonstrating how to set up a game grid, find a path, and initialize the frame limiter for your game loop.
 
 ```python
-import time
-from python_utils_58.math import Vector2D, interpolate
-from python_utils_58.state import GameStateManager
+from python_utils_58.grid import Grid2D
+from python_utils_58.loop import FrameLimiter
 
-# Initialize state manager
-state_manager = GameStateManager(initial_state="MAIN_MENU")
+# 1. Initialize a 10x10 game grid and block a tile
+grid = Grid2D(width=10, height=10)
+grid.set_obstacle(x=2, y=2)
 
-# Handle smooth camera movement
-current_cam = Vector2D(100.0, 150.0)
-target_cam = Vector2D(400.0, 300.0)
+# 2. Find a path from start to end coordinates
+path = grid.find_path(start=(0, 0), end=(4, 4))
+print(f"Path found: {path}")
 
-# Game loop tick (e.g., delta time of 16ms)
-dt = 0.016
-smooth_factor = 5.0
+# 3. Initialize the frame limiter for a 60 FPS target
+limiter = FrameLimiter(target_fps=60)
 
-# Calculate new position
-next_frame_cam = interpolate(current_cam, target_cam, smooth_factor * dt)
-print(f"New Camera Position: {next_frame_cam.x:.2f}, {next_frame_cam.y:.2f}")
-
-# Switch states safely
-state_manager.transition_to("PLAYING")
-print(f"Current State: {state_manager.current_state}")
+# Example game loop representation
+for _ in range(3):
+    dt = limiter.tick()
+    print(f"Frame rendered in {dt:.4f} seconds")
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
