@@ -1,34 +1,36 @@
-import logging
-from typing import Any, Callable, TypeVar, Union
+import functools
 
-logger = logging.getLogger('game_engine')
+def validate_game_input(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        data = args[0] if args else kwargs.get('data')
+        if not isinstance(data, dict) or 'action' not in data:
+            raise ValueError('invalid game payload structure')
+        if data.get('intensity', 0) not in range(0, 11):
+            data['intensity'] = 1
+        return func(*args, **kwargs)
+    return wrapper
 
-F = TypeVar('F', bound=Callable[..., Any])
+class InputProcessor:
+    def __init__(self):
+        self.history = []
 
-def safe_execute(default_value: Any = None) -> Callable[[F], F]:
-    def decorator(func: F) -> F:
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                return func(*args, **kwargs)
-            except (ZeroDivisionError, ValueError, TypeError) as e:
-                logger.error(f'Edge case trigger in {func.__name__}: {e}')
-                return default_value
-            except Exception as e:
-                logger.critical(f'Unexpected engine crash: {e}')
-                raise
-        return wrapper  # type: ignore
-    return decorator
+    @validate_game_input
+    def process(self, data):
+        action = data['action']
+        intensity = data.get('intensity', 1)
+        result = f'{action} executed at {intensity} power'
+        self.history.append(result)
+        return result
 
-class GameStateValidator:
-    @staticmethod
-    @safe_execute(default_value=False)
-    def validate_coords(x: Any, y: Any) -> bool:
-        if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
-            raise TypeError('Coordinates must be numeric')
-        return -1000 <= x <= 1000 and -1000 <= y <= 1000
+def run_main_loop(processor, stream):
+    for raw_packet in stream:
+        try:
+            print(processor.process(raw_packet))
+        except (ValueError, TypeError) as e:
+            print(f'malformed frame ignored: {e}')
 
-    @staticmethod
-    def sanitize_input(data: Union[str, int, None]) -> str:
-        if data is None:
-            return 'unknown'
-        return str(data)[:255].replace('<', '').replace('>', '')
+if __name__ == '__main__':
+    proc = InputProcessor()
+    packets = [{'action': 'jump', 'intensity': 5}, {'invalid': 'data'}, {'action': 'run', 'intensity': 99}]
+    run_main_loop(proc, packets)
