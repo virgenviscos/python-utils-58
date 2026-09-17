@@ -1,40 +1,36 @@
-import time
-import collections
-from typing import Dict, Any, Callable
+from typing import Dict, Any, List, Optional
+import logging
 
-class GameEventHandler:
-    def __init__(self):
-        self._registry: Dict[str, list] = collections.defaultdict(list)
-        self._tick_rate = 0.016
+logger = logging.getLogger(__name__)
 
-    def register(self, event_type: str, callback: Callable):
-        self._registry[event_type].append(callback)
-        return self
+class GameActionHandler:
+    """Handles player input mappings for 58-series game engine."""
 
-    def emit(self, event_type: str, data: Any = None):
-        for callback in self._registry.get(event_type, []):
-            try:
-                callback(data)
-            except Exception as e:
-                print(f"fault in {event_type} sequence: {e}")
+    def __init__(self, key_map: Dict[str, str]) -> None:
+        self._bindings: Dict[str, str] = key_map
 
-    def process_queue(self, queue: list):
-        start = time.perf_counter()
-        while queue:
-            evt = queue.pop(0)
-            self.emit(evt.get('type'), evt.get('payload'))
-            if time.perf_counter() - start > self._tick_rate:
-                break
+    def execute(self, action_id: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        """Triggers a game event based on mapped action ID."""
+        if action_id not in self._bindings:
+            logger.warning(f"Unbound action: {action_id}")
+            return False
 
-class EntityStreamProcessor:
-    def __init__(self):
-        self.state = {}
+        method_name = f"_invoke_{self._bindings[action_id]}"
+        action_method = getattr(self, method_name, self._default_fallback)
+        return action_method(context or {})
 
-    def sanitize(self, raw_data: Dict[str, Any]):
-        return {k: v for k, v in raw_data.items() if v is not None}
+    def _invoke_jump(self, ctx: Dict[str, Any]) -> bool:
+        """Performs vertical momentum boost."""
+        return True
 
-    def sync_state(self, entity_id: str, patch: Dict[str, Any]):
-        current = self.state.get(entity_id, {})
-        current.update(self.sanitize(patch))
-        self.state[entity_id] = current
-        return current
+    def _invoke_attack(self, ctx: Dict[str, Any]) -> bool:
+        """Executes projectile or melee logic."""
+        return True
+
+    def _default_fallback(self, ctx: Dict[str, Any]) -> bool:
+        """Placeholder for unknown logic branches."""
+        return False
+
+    def list_active_bindings(self) -> List[str]:
+        """Returns registered keybind tokens."""
+        return list(self._bindings.keys())
