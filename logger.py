@@ -1,32 +1,34 @@
-import time
-import functools
 import logging
+from logging.handlers import RotatingFileHandler
+import os
 
-logger = logging.getLogger('game_net')
+def setup_game_logger(name: str = "gaming_core") -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter(
+        "[%(asctime)s][%(levelname)s][%(name)s] -> %(message)s",
+        datefmt="%H:%M:%S"
+    )
 
-def retry_operation(max_attempts=3, delay=1.5, backoff=2):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts, current_delay = 0, delay
-            while attempts < max_attempts:
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    attempts += 1
-                    if attempts >= max_attempts:
-                        logger.error(f'operation failed after {attempts} attempts: {e}')
-                        raise
-                    logger.warning(f'retry {attempts}/{max_attempts} in {current_delay}s due to {type(e).__name__}')
-                    time.sleep(current_delay)
-                    current_delay *= backoff
-        return wrapper
-    return decorator
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
-@retry_operation(max_attempts=5)
-def execute_network_call(payload):
-    # simulates volatile connection in game environment
-    import random
-    if random.random() < 0.7:
-        raise ConnectionError('packet loss detected')
-    return {'status': 'success', 'data': payload}
+    file_handler = RotatingFileHandler(
+        filename=os.path.join(log_dir, f"{name}.log"),
+        maxBytes=1024 * 1024 * 5,
+        backupCount=3
+    )
+    file_handler.setFormatter(formatter)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+
+    return logger
+
+logger = setup_game_logger()
