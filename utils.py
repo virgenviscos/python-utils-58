@@ -1,41 +1,34 @@
-import logging
+import time
+import functools
+import random
 
-class InputProcessor:
-    def __init__(self):
-        self.valid_commands = {'move', 'attack', 'cast', 'quit'}
+def resilient_network_op(max_attempts=3, base_delay=1.0, backoff=2.0):
+    """Decorator for network instability mitigation using exponential backoff."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            attempts = 0
+            current_delay = base_delay
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, TimeoutError) as e:
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        raise e
+                    jitter = random.uniform(0, 0.1 * current_delay)
+                    time.sleep(current_delay + jitter)
+                    current_delay *= backoff
+        return wrapper
+    return decorator
 
-    def sanitize_input(self, user_input):
-        return user_input.strip().lower()
+def ping_game_server(url):
+    """Simulated network call for gaming latency tests."""
+    import random
+    if random.random() < 0.7:
+        raise ConnectionError("Server node unreachable")
+    return {"status": "ok", "latency": "24ms"}
 
-    def is_valid(self, cmd):
-        return cmd in self.valid_commands
-
-    def process_game_loop(self, input_stream):
-        for raw_entry in input_stream:
-            clean_cmd = self.sanitize_input(raw_entry)
-            
-            if not clean_cmd:
-                continue
-
-            try:
-                if not self.is_valid(clean_cmd):
-                    raise ValueError(f'illegal maneuver: {clean_cmd}')
-                
-                yield self.execute_action(clean_cmd)
-
-            except ValueError as e:
-                logging.warning(f'ignored invalid action: {e}')
-                yield None
-
-    def execute_action(self, cmd):
-        return f'executing {cmd} command successfully'
-
-def run_engine(commands):
-    proc = InputProcessor()
-    for result in proc.process_game_loop(commands):
-        if result:
-            print(result)
-
-if __name__ == '__main__':
-    data = [' move ', 'invalid', 'attack', 'quit']
-    run_engine(data)
+@resilient_network_op(max_attempts=5)
+def get_server_status(url):
+    return ping_game_server(url)
