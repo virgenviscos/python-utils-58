@@ -1,34 +1,26 @@
-import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+from typing import Any, Optional, Dict
+from datetime import datetime
 
-def setup_game_logger(name: str = "gaming_core") -> logging.Logger:
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter(
-        "[%(asctime)s][%(levelname)s][%(name)s] -> %(message)s",
-        datefmt="%H:%M:%S"
-    )
+class GameLogger:
+    """Custom logger for game engine telemetry and events."""
 
-    log_dir = "logs"
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    def __init__(self, context: str = "default") -> None:
+        self.context: str = context
+        self.level_map: Dict[str, str] = {"INFO": "[.]", "WARN": "[!]", "CRIT": "[X]"}
 
-    file_handler = RotatingFileHandler(
-        filename=os.path.join(log_dir, f"{name}.log"),
-        maxBytes=1024 * 1024 * 5,
-        backupCount=3
-    )
-    file_handler.setFormatter(formatter)
+    def log(self, message: str, level: str = "INFO") -> None:
+        """Formats and outputs a message with a level prefix."""
+        prefix: str = self.level_map.get(level, "[?]")
+        timestamp: str = datetime.now().strftime("%H:%M:%S")
+        entry: str = f"{timestamp} {prefix} {self.context.upper()}: {message}"
+        sys.stdout.write(entry + "\n")
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
+    def __call__(self, event: Any, data: Optional[Dict[str, Any]] = None) -> None:
+        """Shorthand call for logging game engine state changes."""
+        payload: str = f"{event} | {str(data) if data else 'none'}"
+        self.log(payload)
 
-    if not logger.handlers:
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-
-    return logger
-
-logger = setup_game_logger()
+def get_logger(name: str) -> GameLogger:
+    """Factory function for creating persistent game loggers."""
+    return GameLogger(context=name)
