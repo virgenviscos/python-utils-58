@@ -1,26 +1,40 @@
-import sys
-from typing import Any, Optional, Dict
-from datetime import datetime
+import time
+import collections
+import functools
 
-class GameLogger:
-    """Custom logger for game engine telemetry and events."""
+class AsyncBufferLogger:
+    def __init__(self, capacity=100):
+        self._buffer = collections.deque(maxlen=capacity)
+        self._last_flush = time.perf_counter()
+        self._threshold = 0.5
 
-    def __init__(self, context: str = "default") -> None:
-        self.context: str = context
-        self.level_map: Dict[str, str] = {"INFO": "[.]", "WARN": "[!]", "CRIT": "[X]"}
+    def log(self, message: str):
+        self._buffer.append(f'[{time.time():.4f}] {message}')
+        if len(self._buffer) >= self._buffer.maxlen or (time.perf_counter() - self._last_flush) > self._threshold:
+            self.flush()
 
-    def log(self, message: str, level: str = "INFO") -> None:
-        """Formats and outputs a message with a level prefix."""
-        prefix: str = self.level_map.get(level, "[?]")
-        timestamp: str = datetime.now().strftime("%H:%M:%S")
-        entry: str = f"{timestamp} {prefix} {self.context.upper()}: {message}"
-        sys.stdout.write(entry + "\n")
+    def flush(self):
+        if not self._buffer:
+            return
+        output = '\n'.join(self._buffer)
+        with open('game_engine.log', 'a') as f:
+            f.write(output + '\n')
+        self._buffer.clear()
+        self._last_flush = time.perf_counter()
 
-    def __call__(self, event: Any, data: Optional[Dict[str, Any]] = None) -> None:
-        """Shorthand call for logging game engine state changes."""
-        payload: str = f"{event} | {str(data) if data else 'none'}"
-        self.log(payload)
+    def __enter__(self):
+        return self
 
-def get_logger(name: str) -> GameLogger:
-    """Factory function for creating persistent game loggers."""
-    return GameLogger(context=name)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.flush()
+
+def batch_optimized(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        duration = time.perf_counter() - start
+        if duration > 0.016:
+            print(f'Warning: {func.__name__} took {duration:.4f}s')
+        return result
+    return wrapper
