@@ -1,40 +1,33 @@
-import time
-import collections
-import functools
+import logging
+from logging.handlers import RotatingFileHandler
+import os
 
-class AsyncBufferLogger:
-    def __init__(self, capacity=100):
-        self._buffer = collections.deque(maxlen=capacity)
-        self._last_flush = time.perf_counter()
-        self._threshold = 0.5
+def setup_game_logger(name: str = 'python-utils-58'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter(
+        '[%(asctime)s] [%(levelname)s] [%(name)s] > %(message)s',
+        datefmt='%H:%M:%S'
+    )
 
-    def log(self, message: str):
-        self._buffer.append(f'[{time.time():.4f}] {message}')
-        if len(self._buffer) >= self._buffer.maxlen or (time.perf_counter() - self._last_flush) > self._threshold:
-            self.flush()
+    log_path = os.path.join(os.getcwd(), 'logs', 'game.log')
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-    def flush(self):
-        if not self._buffer:
-            return
-        output = '\n'.join(self._buffer)
-        with open('game_engine.log', 'a') as f:
-            f.write(output + '\n')
-        self._buffer.clear()
-        self._last_flush = time.perf_counter()
+    # rotating file handler: 5MB per file, keep 3 backups
+    handler = RotatingFileHandler(
+        log_path, 
+        maxBytes=5 * 1024 * 1024, 
+        backupCount=3
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
-    def __enter__(self):
-        return self
+    # console output for the impatient developer
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.flush()
+    return logger
 
-def batch_optimized(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.perf_counter()
-        result = func(*args, **kwargs)
-        duration = time.perf_counter() - start
-        if duration > 0.016:
-            print(f'Warning: {func.__name__} took {duration:.4f}s')
-        return result
-    return wrapper
+logger = setup_game_logger()
