@@ -1,33 +1,32 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+import functools
 
-def setup_game_logger(name: str = 'python-utils-58'):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter(
-        '[%(asctime)s] [%(levelname)s] [%(name)s] > %(message)s',
-        datefmt='%H:%M:%S'
-    )
+class GameLogger:
+    def __init__(self, name="py-utils-58"):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter('%(levelname)s | %(message)s'))
+        self.logger.addHandler(handler)
 
-    log_path = os.path.join(os.getcwd(), 'logs', 'game.log')
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    def safe_execute(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except (MemoryError, AttributeError, ValueError) as e:
+                self.logger.error(f"Critical crash in {func.__name__}: {str(e)}")
+                return None
+            except Exception:
+                self.logger.critical("Unidentified entity intrusion in stack trace")
+                return None
+        return wrapper
 
-    # rotating file handler: 5MB per file, keep 3 backups
-    handler = RotatingFileHandler(
-        log_path, 
-        maxBytes=5 * 1024 * 1024, 
-        backupCount=3
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
+    def log_event(self, event, status="INFO"):
+        safe_msg = str(event)[:1024] if event else "null_payload"
+        self.logger.info(f"[{status}] {safe_msg}")
 
-    # console output for the impatient developer
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-
-    return logger
-
-logger = setup_game_logger()
+instance = GameLogger()
+log = instance.log_event
+run = instance.safe_execute
