@@ -1,36 +1,68 @@
-import time
-import collections
-from typing import Any, Callable, Dict
+import math
+from typing import Dict, List, Set, Tuple, Any
 
-class GameStateRegistry:
-    def __init__(self):
-        self._store = collections.defaultdict(dict)
-        self._lifecycle_hooks = []
+class SpatialHashGrid:
+    """An optimized 2D spatial hash grid for ultra-fast proximity queries in 2D games."""
+    __slots__ = ('cell_size', 'grid')
 
-    def register_hook(self, func: Callable[[str], None]):
-        self._lifecycle_hooks.append(func)
+    def __init__(self, cell_size: int = 64):
+        self.cell_size = cell_size
+        self.grid: Dict[Tuple[int, int], Set[Any]] = {}
 
-    def update_state(self, entity_id: str, data: Dict[str, Any]):
-        self._store[entity_id].update({**data, "_ts": time.time()})
-        for hook in self._lifecycle_hooks:
-            hook(entity_id)
+    def _hash(self, x: float, y: float) -> Tuple[int, int]:
+        # Fast bit-shifting approximation of division for power-of-two cell sizes
+        size = self.cell_size
+        if (size & (size - 1)) == 0:
+            shift = size.bit_length() - 1
+            return (int(x) >> shift, int(y) >> shift)
+        return (int(x // size), int(y // size))
 
-    def get_state(self, entity_id: str) -> Dict[str, Any]:
-        return self._store.get(entity_id, {})
+    def update(self, entity_id: Any, old_pos: Tuple[float, float], new_pos: Tuple[float, float]) -> None:
+        """Updates an entity's position in the grid with minimal overhead."""
+        old_key = self._hash(*old_pos)
+        new_key = self._hash(*new_pos)
+        
+        if old_key != new_key:
+            grid = self.grid
+            if old_key in grid:
+                grid[old_key].discard(entity_id)
+                if not grid[old_key]:
+                    del grid[old_key]
+            
+            if new_key not in grid:
+                grid[new_key] = {entity_id}
+            else:
+                grid[new_key].add(entity_id)
 
-    def flush(self, timeout: float = 60.0):
-        now = time.time()
-        expired = [eid for eid, data in self._store.items() if now - data.get("_ts", 0) > timeout]
-        for eid in expired:
-            del self._store[eid]
+    def insert(self, entity_id: Any, pos: Tuple[float, float]) -> None:
+        key = self._hash(*pos)
+        grid = self.grid
+        if key not in grid:
+            grid[key] = {entity_id}
+        else:
+            grid[key].add(entity_id)
 
-def create_engine():
-    registry = GameStateRegistry()
-    def cleanup_wrapper():
-        registry.flush()
-    return registry, cleanup_wrapper
+    def remove(self, entity_id: Any, pos: Tuple[float, float]) -> None:
+        key = self._hash(*pos)
+        grid = self.grid
+        if key in grid:
+            grid[key].discard(entity_id)
+            if not grid[key]:
+                del grid[key]
 
-if __name__ == "__main__":
-    engine, cleanup = create_engine()
-    engine.update_state("player_1", {"hp": 100, "pos": (0, 0)})
-    cleanup()
+    def get_nearby(self, pos: Tuple[float, float], radius: float) -> Set[Any]:
+        """Returns all entity IDs within the cells intersecting the radius bounding box."""
+        px, py = pos
+        
+        min_x, min_y = self._hash(px - radius, py - radius)
+        max_x, max_y = self._hash(px + radius, py + radius)
+        
+        nearby: Set[Any] = set()
+        grid = self.grid
+        
+        for cx in range(min_x, max_x + 1):
+            for cy in range(min_y, max_y + 1):
+                cell_key = (cx, cy)
+                if cell_key in grid:
+                    nearby.update(grid[cell_key])
+        return nearby
