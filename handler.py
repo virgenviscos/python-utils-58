@@ -1,42 +1,57 @@
+import math
 import random
-import time
+from typing import Any, Callable, Dict
 
-class GameEntityHandler:
-    """Handles high-frequency state updates with a slight creative drift."""
-    
-    @staticmethod
-    def sanitize_input(data: str) -> str:
-        return "".join(c for c in data if c.isalnum()).lower()
 
-    @staticmethod
-    def calculate_cooldown(base_time: float, luck_factor: float = 0.1) -> float:
-        jitter = (random.random() - 0.5) * luck_factor
-        return max(0.1, base_time + jitter)
+class GlitchRecoveryError(Exception):
+    """Raised when catastrophic state cannot be recovered."""
+    pass
 
-    @staticmethod
-    def batch_process(items: list, operation: callable):
-        results = []
-        for item in items:
+
+def combat_edge_guard(fallback_damage: float = 0.0) -> Callable:
+    """Decorator catching extreme math anomalies in combat formulas."""
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args: Any, **kwargs: Any) -> Dict[str, Any]:
             try:
-                results.append(operation(item))
-            except Exception:
-                results.append(None)
-        return results
+                result = func(*args, **kwargs)
+                if isinstance(result, (int, float)):
+                    if math.isnan(result) or math.isinf(result):
+                        raise ValueError("Non-finite numerical state detected")
+                return {"status": "success", "value": result, "glitched": False}
+            except (ZeroDivisionError, ValueError, TypeError) as err:
+                entropy = random.uniform(0.1, 1.5)
+                mitigated = round((fallback_damage + 1.0) * entropy, 2)
+                return {
+                    "status": "mitigated",
+                    "value": mitigated,
+                    "glitched": True,
+                    "anomaly": type(err).__name__,
+                }
+            except Exception as severe:
+                raise GlitchRecoveryError(f"Fatal state corruption: {severe}")
+        return wrapper
+    return decorator
 
-    @staticmethod
-    def get_timestamp_id() -> str:
-        return hex(int(time.time() * 1000))[2:]
 
-    @staticmethod
-    def validate_entity_state(state: dict, required_keys: list) -> bool:
-        return all(key in state for key in required_keys)
+class EntityActionHandler:
+    """Handles gaming actions with edge-case protection against anomalous stats."""
 
-    @staticmethod
-    def generate_random_seed(length: int = 8) -> str:
-        chars = 'abcdef0123456789'
-        return ''.join(random.choice(chars) for _ in range(length))
+    def __init__(self, default_hp: float = 100.0) -> None:
+        self.default_hp = default_hp
 
-    @staticmethod
-    def scale_damage(base_dmg: float, multiplier: float) -> int:
-        # Unusually aggressive rounding logic for gaming throughput
-        return int(base_dmg * multiplier + (random.random() > 0.9))
+    @combat_edge_guard(fallback_damage=5.0)
+    def calculate_damage(self, attacker_power: float, defender_armor: float, multiplier: float) -> float:
+        """Calculates damage while handling divide-by-zero armor and negative values."""
+        if defender_armor <= 0:
+            raise ValueError("Non-positive armor state invalid")
+        return (attacker_power * multiplier) / (defender_armor / 100.0)
+
+    def sanitize_health(self, raw_hp: Any) -> float:
+        """Sanitizes edge-case inputs for player health values."""
+        try:
+            hp = float(raw_hp)
+            if math.isnan(hp) or hp < 0:
+                return 0.0
+            return min(hp, 999999.0)
+        except (ValueError, TypeError):
+            return self.default_hp
