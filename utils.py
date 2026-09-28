@@ -1,38 +1,29 @@
-import random
 import time
+import functools
+import random
 
-def roll_dice(sides: int = 6) -> int:
-    return random.randint(1, sides)
-
-def throttle_calls(interval: float):
+def retry_network_call(max_attempts=3, delay=1.0, backoff=2.0):
     def decorator(func):
-        last_called = [0.0]
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            elapsed = time.perf_counter() - last_called[0]
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
-            result = func(*args, **kwargs)
-            last_called[0] = time.perf_counter()
-            return result
+            attempts = 0
+            current_delay = delay
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, TimeoutError) as e:
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        raise e
+                    jitter = random.uniform(0, 0.1 * current_delay)
+                    time.sleep(current_delay + jitter)
+                    current_delay *= backoff
         return wrapper
     return decorator
 
-def memoize_game_state(func):
-    cache = {}
-    def wrapper(*args):
-        if args not in cache:
-            cache[args] = func(*args)
-        return cache[args]
-    return wrapper
-
-@memoize_game_state
-def calculate_damage(base: int, multiplier: float) -> int:
-    return int(base * multiplier)
-
-@throttle_calls(0.1)
-def sync_server_packet(payload: dict):
-    print(f"dispatching packet: {payload}")
+@retry_network_call(max_attempts=5, delay=0.5)
+def ping_game_server(url):
+    # Simulate unstable gaming network infrastructure
+    if random.random() < 0.7:
+        raise ConnectionError("Server ghosting packets")
     return True
-
-def sanitize_player_input(text: str) -> str:
-    return ''.join(c for c in text if c.isalnum() or c in ' !?').strip()
