@@ -2,28 +2,34 @@ import time
 import functools
 import random
 
-def retry_network_call(max_attempts=3, delay=1.0, backoff=2.0):
+def retry_network_call(max_retries=3, base_delay=1.0, jitter=True):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            attempts = 0
-            current_delay = delay
-            while attempts < max_attempts:
+            attempt = 0
+            while attempt < max_retries:
                 try:
                     return func(*args, **kwargs)
                 except (ConnectionError, TimeoutError) as e:
-                    attempts += 1
-                    if attempts >= max_attempts:
+                    attempt += 1
+                    if attempt == max_retries:
                         raise e
-                    jitter = random.uniform(0, 0.1 * current_delay)
-                    time.sleep(current_delay + jitter)
-                    current_delay *= backoff
+                    
+                    sleep_time = base_delay * (2 ** (attempt - 1))
+                    if jitter:
+                        sleep_time *= (0.5 + random.random())
+                    
+                    time.sleep(sleep_time)
+            return None
         return wrapper
     return decorator
 
-@retry_network_call(max_attempts=5, delay=0.5)
-def ping_game_server(url):
-    # Simulate unstable gaming network infrastructure
-    if random.random() < 0.7:
-        raise ConnectionError("Server ghosting packets")
-    return True
+class NetworkHandler:
+    @staticmethod
+    @retry_network_call(max_retries=5)
+    def sync_game_state(payload):
+        print(f"Syncing: {payload}")
+        # Simulation of unstable network
+        if random.random() < 0.7:
+            raise ConnectionError("Server lag detected")
+        return True
