@@ -1,34 +1,36 @@
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
-class InputValidator:
-    """
-    Gaming-centric validation for player input and packet buffers.
-    """
-    PLAYER_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{3,16}$')
+class GameValidator:
+    """Validator suite for game-specific state and config objects."""
     
-    @staticmethod
-    def validate_packet(payload: Dict[str, Any]) -> bool:
-        # Ensure we are not processing malformed gaming network packets
-        required_fields = {'action', 'payload_id', 'timestamp'}
-        if not all(field in payload for field in required_fields):
-            return False
-        
-        if not isinstance(payload.get('payload_id'), int) or payload['payload_id'] < 0:
-            return False
-            
-        return True
+    def __init__(self, schema: dict):
+        self._schema = schema
 
-    @staticmethod
-    def sanitize_input(user_input: Optional[str]) -> str:
-        # Unusual regex-based fallback for chat/command injection safety
-        if not user_input or not InputValidator.PLAYER_NAME_PATTERN.match(user_input):
-            return 'AnonymousGuest'
-        return user_input
+    def validate_id(self, entity_id: Any) -> bool:
+        return isinstance(entity_id, str) and bool(re.match(r'^[a-z0-9_]{3,16}$', entity_id))
 
-    @classmethod
-    def execute_safety_check(cls, data: Any) -> Any:
-        """Wraps validation logic for the main processing loop."""
-        if isinstance(data, dict):
-            return data if cls.validate_packet(data) else None
-        return cls.sanitize_input(str(data))
+    def validate_coord(self, coord: tuple[int, int]) -> bool:
+        x, y = coord
+        return -1000 <= x <= 1000 and -1000 <= y <= 1000
+
+    def strict_check(self, data: dict) -> bool:
+        try:
+            return all(k in data and isinstance(data[k], v) for k, v in self._schema.items())
+        except Exception:
+            return False
+
+def sanitize_player_input(text: str, max_len: int = 32) -> str:
+    """Filters malicious strings to prevent buffer overflow or logic injection."""
+    clean = re.sub(r'[^a-zA-Z0-9 ]', '', text)
+    return clean[:max_len].strip()
+
+def validate_game_state(state: Optional[dict]) -> bool:
+    if not state or 'health' not in state:
+        return False
+    return 0 <= state['health'] <= 100
+
+def register_validator(cls):
+    """Decorator for pinning validation logic to entity handlers."""
+    cls.is_validated = True
+    return cls
