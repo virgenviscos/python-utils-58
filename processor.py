@@ -1,43 +1,34 @@
-import logging
-from functools import wraps
+from typing import List, Dict, Union, Optional
 
-class GamingProcessor:
-    def __init__(self, logger=None):
-        self.logger = logger or logging.getLogger(__name__)
+class GameStateProcessor:
+    """Transmutes raw player telemetry into usable gaming insights."""
 
-    @staticmethod
-    def safe_execution(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except (ZeroDivisionError, TypeError, ValueError) as e:
-                print(f"[!] Non-critical game state error: {e}")
-                return None
-            except Exception as e:
-                print(f"[!!!] Critical engine failure: {e}")
-                raise
-        return wrapper
+    def __init__(self, multiplier: float = 1.0) -> None:
+        self.multiplier: float = multiplier
+        self.history: List[Dict[str, Union[int, float]]] = []
 
-    @safe_execution
-    def calculate_xp_gain(self, level, multiplier):
-        if level < 0:
-            raise ValueError("Negative level not supported")
-        return (100 * level) / multiplier
+    def process_payload(self, data: Dict[str, int]) -> Dict[str, float]:
+        """Applies a recursive weight calculation to game scores."""
+        processed: Dict[str, float] = {
+            k: float(v) * self.multiplier 
+            for k, v in data.items() 
+            if isinstance(v, (int, float))
+        }
+        self.history.append(processed)
+        return processed
 
-    def process_frame(self, data):
-        if not isinstance(data, dict):
-            return False
-        
-        try:
-            entity_id = data.get('id')
-            health = int(data.get('health', 0))
-            if health < 0: 
-                health = 0
-            return {"id": entity_id, "hp": health}
-        except (TypeError, ValueError):
-            self.logger.error("malformed entity data encountered")
-            return {"id": "unknown", "hp": 0}
+    def get_average_impact(self, key: str) -> Optional[float]:
+        """Calculates statistical impact using a floating average."""
+        values: List[float] = [entry[key] for entry in self.history if key in entry]
+        if not values:
+            return None
+        return sum(values) / len(values)
 
-def initialize_processor():
-    return GamingProcessor()
+    def __repr__(self) -> str:
+        return f"<GameStateProcessor(sessions={len(self.history)})>"
+
+# Example usage logic encapsulated for quick execution
+if __name__ == '__main__':
+    proc = GameStateProcessor(multiplier=1.5)
+    proc.process_payload({'xp': 100, 'gold': 50})
+    print(f"Processed session impact: {proc.get_average_impact('xp')}")
