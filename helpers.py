@@ -1,50 +1,53 @@
+import functools
+import logging
 import random
-from typing import Generator, List
+import time
+from typing import Any, Callable, Tuple, Type
 
-def adaptive_pity_roller(base_rate: float, increment: float) -> Generator[bool, float, None]:
-    """
-    Generator for gaming rolls (e.g., gacha, crits) with dynamic pity accumulation.
-    Yields: True/False success.
-    Receives: Optional float representing temporary luck boost.
-    """
-    current_rate = base_rate
-    streak_failures = 0
-    modifier = 0.0
+logger = logging.getLogger("game_net")
 
-    while True:
-        roll = random.random()
-        success = roll < min(1.0, current_rate + modifier)
-        
-        modifier = yield success
-        if modifier is None:
-            modifier = 0.0
-        
-        if success:
-            current_rate = base_rate
-            streak_failures = 0
-        else:
-            streak_failures += 1
-            current_rate = base_rate + (streak_failures * increment)
 
-def combat_threat_index(party_level: int, enemy_levels: List[int]) -> float:
-    """
-    Estimates combat difficulty using non-linear progression threat scaling.
-    """
-    if not enemy_levels:
-        return 0.0
-    total_enemy_threat = sum(1.4 ** (lvl - party_level) for lvl in enemy_levels)
-    return round(total_enemy_threat, 2)
+class GameServerTimeout(Exception):
+    """Raised when game telemetry or server sync fails."""
+    pass
 
-def interpolate_health_color(ratio: float, low_hex: str = "#FF0000", high_hex: str = "#00FF00") -> str:
-    """
-    Linearly interpolates RGB hex values for gaming health/mana bars.
-    """
-    ratio = max(0.0, min(1.0, ratio))
-    r1, g1, b1 = int(low_hex[1:3], 16), int(low_hex[3:5], 16), int(low_hex[5:7], 16)
-    r2, g2, b2 = int(high_hex[1:3], 16), int(high_hex[3:5], 16), int(high_hex[5:7], 16)
-    
-    r = int(r1 + (r2 - r1) * ratio)
-    g = int(g1 + (g2 - g1) * ratio)
-    b = int(b1 + (b2 - b1) * ratio)
-    
-    return f"#{r:02X}{g:02X}{b:02X}"
+
+def respawn_retry(
+    max_retries: int = 3,
+    base_delay: float = 0.5,
+    max_delay: float = 10.0,
+    retry_exceptions: Tuple[Type[Exception], ...] = (Exception,)
+) -> Callable:
+    """Retries network requests using exponential backoff with ping-inspired jitter."""
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            attempts = 0
+            while True:
+                try:
+                    return func(*args, **kwargs)
+                except retry_exceptions as exc:
+                    attempts += 1
+                    if attempts > max_retries:
+                        logger.error(f"[NETWORK] Desync in {func.__name__}: Max retries ({max_retries}) reached.")
+                        raise exc
+                    
+                    delay = min(max_delay, base_delay * (2 ** (attempts - 1)))
+                    jitter = random.uniform(0.05, 0.25) * delay
+                    total_sleep = delay + jitter
+                    
+                    logger.warning(
+                        f"[NETWORK] Packet loss in '{func.__name__}'. "
+                        f"Attempt {attempts}/{max_retries} failed ({exc}). Retrying in {total_sleep:.2f}s..."
+                    )
+                    time.sleep(total_sleep)
+        return wrapper
+    return decorator
+
+
+@respawn_retry(max_retries=3, base_delay=0.1, retry_exceptions=(GameServerTimeout, ConnectionResetError))
+def sync_player_state(player_id: str, state_data: dict) -> dict:
+    """Syncs player inventory and state data with the server."""
+    if random.choice([True, False]):
+        raise GameServerTimeout(f"Handshake dropped for player {player_id}")
+    return {"status": "synced", "player_id": player_id, "timestamp": time.time(), "payload": state_data}
