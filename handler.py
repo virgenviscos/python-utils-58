@@ -1,57 +1,39 @@
-import math
-import random
-from typing import Any, Callable, Dict
+import zlib
+import pickle
+import base64
+from typing import Any
 
+class GameStatePacker:
+    """Compresses and encodes gaming session metadata."""
+    
+    @staticmethod
+    def serialize(data: Any, level: int = 9) -> str:
+        """Serializes arbitrary game objects into compact strings."""
+        raw_bytes = pickle.dumps(data)
+        compressed = zlib.compress(raw_bytes, level=level)
+        return base64.b64encode(compressed).decode('ascii')
 
-class GlitchRecoveryError(Exception):
-    """Raised when catastrophic state cannot be recovered."""
-    pass
+    @staticmethod
+    def deserialize(payload: str) -> Any:
+        """Reconstructs game objects from compressed strings."""
+        decoded = base64.b64decode(payload)
+        decompressed = zlib.decompress(decoded)
+        return pickle.loads(decompressed)
 
+    @classmethod
+    def patch_state(cls, state: dict, updates: dict) -> dict:
+        """Recursive-like merge for gaming state objects."""
+        for key, value in updates.items():
+            if isinstance(value, dict) and key in state:
+                state[key] = cls.patch_state(state[key], value)
+            else:
+                state[key] = value
+        return state
 
-def combat_edge_guard(fallback_damage: float = 0.0) -> Callable:
-    """Decorator catching extreme math anomalies in combat formulas."""
-    def decorator(func: Callable) -> Callable:
-        def wrapper(*args: Any, **kwargs: Any) -> Dict[str, Any]:
-            try:
-                result = func(*args, **kwargs)
-                if isinstance(result, (int, float)):
-                    if math.isnan(result) or math.isinf(result):
-                        raise ValueError("Non-finite numerical state detected")
-                return {"status": "success", "value": result, "glitched": False}
-            except (ZeroDivisionError, ValueError, TypeError) as err:
-                entropy = random.uniform(0.1, 1.5)
-                mitigated = round((fallback_damage + 1.0) * entropy, 2)
-                return {
-                    "status": "mitigated",
-                    "value": mitigated,
-                    "glitched": True,
-                    "anomaly": type(err).__name__,
-                }
-            except Exception as severe:
-                raise GlitchRecoveryError(f"Fatal state corruption: {severe}")
-        return wrapper
-    return decorator
-
-
-class EntityActionHandler:
-    """Handles gaming actions with edge-case protection against anomalous stats."""
-
-    def __init__(self, default_hp: float = 100.0) -> None:
-        self.default_hp = default_hp
-
-    @combat_edge_guard(fallback_damage=5.0)
-    def calculate_damage(self, attacker_power: float, defender_armor: float, multiplier: float) -> float:
-        """Calculates damage while handling divide-by-zero armor and negative values."""
-        if defender_armor <= 0:
-            raise ValueError("Non-positive armor state invalid")
-        return (attacker_power * multiplier) / (defender_armor / 100.0)
-
-    def sanitize_health(self, raw_hp: Any) -> float:
-        """Sanitizes edge-case inputs for player health values."""
-        try:
-            hp = float(raw_hp)
-            if math.isnan(hp) or hp < 0:
-                return 0.0
-            return min(hp, 999999.0)
-        except (ValueError, TypeError):
-            return self.default_hp
+# Example usage for session management
+if __name__ == '__main__':
+    packer = GameStatePacker()
+    initial_data = {'level': 1, 'hp': 100, 'items': ['sword', 'shield']}
+    blob = packer.serialize(initial_data)
+    restored = packer.deserialize(blob)
+    assert restored['hp'] == 100
