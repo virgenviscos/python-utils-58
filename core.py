@@ -1,38 +1,41 @@
-import time
-import random
-from typing import Callable, Any
+import functools
 
-def frame_rate_throttle(target_fps: float) -> Callable:
-    interval = 1.0 / target_fps
-    def decorator(func: Callable) -> Callable:
-        last_call = [0.0]
-        def wrapper(*args, **kwargs):
-            now = time.perf_counter()
-            elapsed = now - last_call[0]
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
-            last_call[0] = time.perf_counter()
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-def loot_generator(pool: dict[str, float]) -> str:
-    items = list(pool.keys())
-    weights = list(pool.values())
-    return random.choices(items, weights=weights, k=1)[0]
-
-def coordinate_mapper(x: int, y: int, grid_size: int = 1024) -> int:
-    return (x << 16) | (y & 0xFFFF)
-
-def sanitize_player_input(text: str) -> str:
-    return ''.join(c for c in text if c.isalnum() or c in ' _-').strip()[:32]
-
-class EntityRegistry:
+class GameEngineOptimizer:
+    """Uses a functional cache-warmup strategy for high-frequency game ticks."""
     def __init__(self):
-        self._storage = {}
+        self._tick_registry = {}
+        self._hot_path_cache = {}
 
-    def __setitem__(self, key: int, value: Any):
-        self._storage[key] = value
+    def accelerate(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (func.__name__, args, frozenset(kwargs.items()))
+            if key not in self._hot_path_cache:
+                self._hot_path_cache[key] = func(*args, **kwargs)
+            return self._hot_path_cache[key]
+        return wrapper
 
-    def __getitem__(self, key: int) -> Any:
-        return self._storage.get(key)
+    def flush_stale_data(self):
+        """Clears cache to prevent memory bloat in long-running gaming sessions."""
+        self._hot_path_cache.clear()
+
+class StateProcessor:
+    """Inlined processing logic for core game loop optimizations."""
+    __slots__ = ['data', '_optimizer']
+
+    def __init__(self, data):
+        self.data = data
+        self._optimizer = GameEngineOptimizer()
+
+    def calculate_frame_delta(self, entity_id: int) -> float:
+        @self._optimizer.accelerate
+        def _calc(eid):
+            # Simulating complex physics projection
+            return (self.data.get(eid, 0) ** 0.5) * 1.618
+        return _calc(entity_id)
+
+# Global engine hook for performance injection
+engine_core = StateProcessor(data={i: i * 1024 for i in range(100)})
+
+def get_optimized_value(eid):
+    return engine_core.calculate_frame_delta(eid)
