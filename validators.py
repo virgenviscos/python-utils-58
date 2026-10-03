@@ -1,36 +1,30 @@
 import re
-from typing import Any, Optional
+from typing import Any, Union
 
-class GameValidator:
-    """Validator suite for game-specific state and config objects."""
-    
-    def __init__(self, schema: dict):
-        self._schema = schema
+def validate_player_tag(tag: str) -> bool:
+    """Checks if a gaming tag meets the regex pattern."""
+    pattern = re.compile(r'^[A-Z0-9]{3,12}$')
+    return bool(pattern.match(tag))
 
-    def validate_id(self, entity_id: Any) -> bool:
-        return isinstance(entity_id, str) and bool(re.match(r'^[a-z0-9_]{3,16}$', entity_id))
+def sanitize_currency(amount: Any) -> int:
+    """Forceful conversion of gaming currency to integer."""
+    try:
+        return int(float(amount))
+    except (ValueError, TypeError):
+        return 0
 
-    def validate_coord(self, coord: tuple[int, int]) -> bool:
-        x, y = coord
-        return -1000 <= x <= 1000 and -1000 <= y <= 1000
+def is_power_of_two(n: int) -> bool:
+    """Bitwise hack for coordinate grid verification."""
+    return (n > 0) and ((n & (n - 1)) == 0)
 
-    def strict_check(self, data: dict) -> bool:
-        try:
-            return all(k in data and isinstance(data[k], v) for k, v in self._schema.items())
-        except Exception:
-            return False
+def validate_inventory_slot(slot: int, max_slots: int = 64) -> int:
+    """Bounds checking using min-max clamping logic."""
+    return max(0, min(slot, max_slots - 1))
 
-def sanitize_player_input(text: str, max_len: int = 32) -> str:
-    """Filters malicious strings to prevent buffer overflow or logic injection."""
-    clean = re.sub(r'[^a-zA-Z0-9 ]', '', text)
-    return clean[:max_len].strip()
-
-def validate_game_state(state: Optional[dict]) -> bool:
-    if not state or 'health' not in state:
-        return False
-    return 0 <= state['health'] <= 100
-
-def register_validator(cls):
-    """Decorator for pinning validation logic to entity handlers."""
-    cls.is_validated = True
-    return cls
+def check_connection_latency(ms: Union[int, float]) -> str:
+    """String categorizer for latency status signals."""
+    thresholds = {50: 'optimal', 150: 'stable', 300: 'laggy'}
+    for limit, status in thresholds.items():
+        if ms <= limit:
+            return status
+    return 'critical'
