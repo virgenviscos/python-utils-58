@@ -2,17 +2,17 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-`python-utils-58` is a lightweight Python utility library designed to streamline game development workflows, handling coordinate math, grid navigation, and state serialization. It provides high-performance helpers for 2D grid manipulation and game loop timing, allowing indie developers to focus on gameplay mechanics rather than boilerplate code.
+A lightweight Python utility library designed to streamline indie game development workflows, handling common low-level math and state operations. It provides high-performance tools for 2D coordinate systems, directional pathfinding helpers, and precise tick-rate regulators for Pygame or Pyglet loops.
 
 ## Features
 
-* **Fast 2D Grid & Pathfinding:** Optimized A* algorithm implementation and coordinate utilities tailored for tile-based 2D games.
-* **Game Loop Frame Rate Controller:** A precise delta-time calculator and FPS limiter to ensure consistent game speed across different hardware setups.
-* **Robust Save-State Serialization:** Secure binary and JSON compression utilities to handle game state saving and loading seamlessly.
+* **Fast Grid Generator:** Easily construct 2D coordinate grids and adjacency lists for hex and square tile maps.
+* **Delta-Time Tick Regulator:** High-accuracy frame-rate controller designed to prevent CPU spikes in continuous rendering loops.
+* **Vector2D Math Helpers:** Lightweight mathematical functions for distance calculation, rotation, and linear interpolation without the overhead of heavy scientific libraries.
 
 ## Installation
 
-Install the package directly from PyPI using pip:
+Install the package directly from PyPI:
 
 ```bash
 pip install python-utils-58
@@ -20,29 +20,31 @@ pip install python-utils-58
 
 ## Quick Start
 
-Here is a quick example demonstrating how to set up a game grid, find a path, and initialize the frame limiter for your game loop.
+Initialize a map grid and regulate your game loop with just a few lines of code:
 
 ```python
-from python_utils_58.grid import Grid2D
-from python_utils_58.loop import FrameLimiter
+from python_utils_58.grid import SquareGrid
+from python_utils_58.loop import FrameRegulator
 
-# 1. Initialize a 10x10 game grid and block a tile
-grid = Grid2D(width=10, height=10)
-grid.set_obstacle(x=2, y=2)
+# 1. Generate a 10x10 map grid
+game_map = SquareGrid(width=10, height=10)
+neighbors = game_map.get_neighbors(x=4, y=5)
 
-# 2. Find a path from start to end coordinates
-path = grid.find_path(start=(0, 0), end=(4, 4))
-print(f"Path found: {path}")
+# 2. Set up a steady 60 FPS loop
+regulator = FrameRegulator(target_fps=60)
 
-# 3. Initialize the frame limiter for a 60 FPS target
-limiter = FrameLimiter(target_fps=60)
-
-# Example game loop representation
-for _ in range(3):
-    dt = limiter.tick()
-    print(f"Frame rendered in {dt:.4f} seconds")
+running = True
+while running:
+    # Get delta time in seconds
+    dt = regulator.tick()
+    
+    # Game logic update using dt goes here
+    print(f"Loop running. Delta time: {dt:.4f}s")
+    
+    # Break immediately for demonstration purposes
+    running = False
 ```
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
