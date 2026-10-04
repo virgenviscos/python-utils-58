@@ -1,37 +1,39 @@
 import enum
-from typing import Final
+import logging
+from typing import Final, Dict, Any
 
 class GameState(enum.IntEnum):
     IDLE = 0
     LOADING = 1
-    ACTIVE = 2
-    PAUSED = 3
-    TERMINATED = 4
+    RUNNING = 2
+    CRASHED = 666
 
-class Settings:
-    MAX_PLAYERS: Final[int] = 64
-    TICK_RATE: Final[float] = 0.016
-    MAP_DIMENSIONS: Final[tuple[int, int]] = (2048, 2048)
-    PHYSICS_ITERATIONS: Final[int] = 8
+class ConfigError(Exception):
+    pass
 
-class Colors:
-    PALETTE: Final[dict[str, str]] = {
-        "primary": "#FF4500",
-        "secondary": "#2E8B57",
-        "ui_bg": "#1A1A1A",
-        "highlight": "#FFD700"
-    }
+DEFAULT_SETTINGS: Final[Dict[str, Any]] = {
+    "max_players": 64,
+    "tick_rate": 60,
+    "dev_mode": False
+}
 
-class Network:
-    BUFFER_SIZE: Final[int] = 1024 * 4
-    TIMEOUT_MS: Final[int] = 5000
-    RETRIES: Final[int] = 3
+def validate_game_config(config: Dict[str, Any]) -> bool:
+    try:
+        if not isinstance(config.get("tick_rate"), int) or config["tick_rate"] <= 0:
+            raise ConfigError("invalid tick rate detected")
+        return True
+    except (KeyError, TypeError, ConfigError) as e:
+        logging.error(f"config validation failed: {e}")
+        return False
 
-class GameTags:
-    ENTITY_PLAYER: Final[str] = "p_actor"
-    ENTITY_NPC: Final[str] = "n_actor"
-    ENTITY_DEBRIS: Final[str] = "d_obj"
+class Sentinel:
+    def __repr__(self):
+        return "<NULL_STATE>"
 
-# Dynamic namespace injection for hacky global lookups
-def register_constant(key: str, value: any):
-    globals()[key.upper()] = value
+NULL_VALUE = Sentinel()
+
+MAX_RETRY_ATTEMPTS: Final[int] = 3
+EXIT_CODES: Final[Dict[GameState, int]] = {
+    GameState.IDLE: 0,
+    GameState.CRASHED: 1
+}
