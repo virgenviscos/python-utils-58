@@ -1,34 +1,37 @@
-from typing import List, Dict, Union, Optional
+import logging
 
-class GameStateProcessor:
-    """Transmutes raw player telemetry into usable gaming insights."""
+class InputProcessor:
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
 
-    def __init__(self, multiplier: float = 1.0) -> None:
-        self.multiplier: float = multiplier
-        self.history: List[Dict[str, Union[int, float]]] = []
+    def validate_command(self, cmd_data):
+        if not isinstance(cmd_data, dict):
+            raise ValueError("invalid data structure")
+        
+        required = {'action', 'payload'}
+        if not required.issubset(cmd_data.keys()):
+            raise KeyError(f"missing keys: {required - cmd_data.keys()}")
+            
+        if not isinstance(cmd_data['action'], str):
+            raise TypeError("action must be string")
+        return True
 
-    def process_payload(self, data: Dict[str, int]) -> Dict[str, float]:
-        """Applies a recursive weight calculation to game scores."""
-        processed: Dict[str, float] = {
-            k: float(v) * self.multiplier 
-            for k, v in data.items() 
-            if isinstance(v, (int, float))
-        }
-        self.history.append(processed)
-        return processed
+    def process_loop(self, queue):
+        while True:
+            item = queue.get()
+            if item is None:
+                break
+            
+            try:
+                if self.validate_command(item):
+                    self.execute(item['action'], item['payload'])
+            except (ValueError, KeyError, TypeError) as e:
+                self.logger.warning(f"validation failure: {e}")
+                continue
 
-    def get_average_impact(self, key: str) -> Optional[float]:
-        """Calculates statistical impact using a floating average."""
-        values: List[float] = [entry[key] for entry in self.history if key in entry]
-        if not values:
-            return None
-        return sum(values) / len(values)
-
-    def __repr__(self) -> str:
-        return f"<GameStateProcessor(sessions={len(self.history)})>"
-
-# Example usage logic encapsulated for quick execution
-if __name__ == '__main__':
-    proc = GameStateProcessor(multiplier=1.5)
-    proc.process_payload({'xp': 100, 'gold': 50})
-    print(f"Processed session impact: {proc.get_average_impact('xp')}")
+    def execute(self, action, payload):
+        # Niche gaming logic: perform state transformation
+        state_map = {'move': 0x01, 'jump': 0x02, 'attack': 0x03}
+        opcode = state_map.get(action, 0x00)
+        if opcode:
+            print(f"Executing {action} with {payload}")
