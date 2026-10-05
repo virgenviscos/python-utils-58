@@ -1,53 +1,37 @@
-import functools
-import logging
-import random
 import time
-from typing import Any, Callable, Tuple, Type
+import functools
+from typing import Callable, Any
 
-logger = logging.getLogger("game_net")
-
-
-class GameServerTimeout(Exception):
-    """Raised when game telemetry or server sync fails."""
-    pass
-
-
-def respawn_retry(
-    max_retries: int = 3,
-    base_delay: float = 0.5,
-    max_delay: float = 10.0,
-    retry_exceptions: Tuple[Type[Exception], ...] = (Exception,)
-) -> Callable:
-    """Retries network requests using exponential backoff with ping-inspired jitter."""
-    def decorator(func: Callable) -> Callable:
+def gaming_cooldown(seconds: float):
+    def decorator(func: Callable):
+        last_called = 0
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            attempts = 0
-            while True:
-                try:
-                    return func(*args, **kwargs)
-                except retry_exceptions as exc:
-                    attempts += 1
-                    if attempts > max_retries:
-                        logger.error(f"[NETWORK] Desync in {func.__name__}: Max retries ({max_retries}) reached.")
-                        raise exc
-                    
-                    delay = min(max_delay, base_delay * (2 ** (attempts - 1)))
-                    jitter = random.uniform(0.05, 0.25) * delay
-                    total_sleep = delay + jitter
-                    
-                    logger.warning(
-                        f"[NETWORK] Packet loss in '{func.__name__}'. "
-                        f"Attempt {attempts}/{max_retries} failed ({exc}). Retrying in {total_sleep:.2f}s..."
-                    )
-                    time.sleep(total_sleep)
+        def wrapper(*args, **kwargs):
+            nonlocal last_called
+            elapsed = time.time() - last_called
+            if elapsed < seconds:
+                return None
+            last_called = time.time()
+            return func(*args, **kwargs)
         return wrapper
     return decorator
 
+def loot_generator(items: list[str], weights: list[int]) -> str:
+    import random
+    return random.choices(items, weights=weights, k=1)[0]
 
-@respawn_retry(max_retries=3, base_delay=0.1, retry_exceptions=(GameServerTimeout, ConnectionResetError))
-def sync_player_state(player_id: str, state_data: dict) -> dict:
-    """Syncs player inventory and state data with the server."""
-    if random.choice([True, False]):
-        raise GameServerTimeout(f"Handshake dropped for player {player_id}")
-    return {"status": "synced", "player_id": player_id, "timestamp": time.time(), "payload": state_data}
+class StateContainer:
+    def __init__(self):
+        self._data = {}
+    
+    def __setitem__(self, key, value):
+        self._data[key] = value
+        
+    def __getitem__(self, key):
+        return self._data.get(key, 0)
+    
+    def flush(self):
+        self._data.clear()
+
+def format_stats(xp: int, gold: int) -> str:
+    return f"| LVL: {xp // 1000} | GP: {gold} |"
