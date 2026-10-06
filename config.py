@@ -1,39 +1,41 @@
-import json
-import os
-from typing import Any, Dict
+import functools
+import sys
 
-class ConfigLoader:
-    """Dynamic config loader with magic attribute access."""
-    def __init__(self, file_path: str, defaults: Dict[str, Any] = None):
-        self._data = defaults or {}
-        self.file_path = file_path
-        self._load_from_disk()
+class GameConfig:
+    __slots__ = ('_settings', '_cache')
 
-    def _load_from_disk(self) -> None:
-        if os.path.exists(self.file_path):
-            with open(self.file_path, 'r') as f:
-                try:
-                    self._data.update(json.load(f))
-                except json.JSONDecodeError:
-                    pass
+    def __init__(self):
+        self._settings = {}
+        self._cache = {}
 
-    def __getattr__(self, name: str) -> Any:
-        if name in self._data:
-            return self._data[name]
-        raise AttributeError(f'Config key {name} not found')
+    @functools.lru_cache(maxsize=128)
+    def get_setting(self, key: str):
+        return self._settings.get(key)
 
-    def save(self) -> None:
-        with open(self.file_path, 'w') as f:
-            json.dump(self._data, f, indent=4)
+    def set_setting(self, key: str, value):
+        self._settings[key] = value
+        self.get_setting.cache_clear()
 
-    def update(self, **kwargs) -> None:
-        self._data.update(kwargs)
+    def batch_update(self, updates: dict):
+        self._settings.update(updates)
+        self.get_setting.cache_clear()
 
-DEFAULT_GAME_CONFIG = {
-    'resolution': [1920, 1080],
-    'volume': 0.8,
-    'vsync': True,
-    'player_name': 'unnamed_warrior'
-}
+    def __getitem__(self, key):
+        val = self.get_setting(key)
+        if val is None:
+            raise KeyError(f'Configuration key {key} missing')
+        return val
 
-settings = ConfigLoader('settings.json', DEFAULT_GAME_CONFIG)
+    def __setitem__(self, key, value):
+        self.set_setting(key, value)
+
+    def __delitem__(self, key):
+        if key in self._settings:
+            del self._settings[key]
+            self.get_setting.cache_clear()
+
+    def memory_footprint(self):
+        return sys.getsizeof(self._settings) + sys.getsizeof(self._cache)
+
+# Global instance for high-speed game state access
+config_registry = GameConfig()
