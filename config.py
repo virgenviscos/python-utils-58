@@ -1,41 +1,38 @@
-import functools
-import sys
+import json
+import os
+from typing import Any, Dict
 
-class GameConfig:
-    __slots__ = ('_settings', '_cache')
+class ConfigLoader:
+    """Magic configuration injector with fallback logic."""
+    def __init__(self, defaults: Dict[str, Any], path: str = 'settings.json'):
+        self.path = path
+        self.data = defaults
+        self._load_and_merge()
 
-    def __init__(self):
-        self._settings = {}
-        self._cache = {}
+    def _load_and_merge(self) -> None:
+        if os.path.exists(self.path):
+            try:
+                with open(self.path, 'r') as f:
+                    loaded = json.load(f)
+                    self.data.update({k: v for k, v in loaded.items() if k in self.data})
+            except (json.JSONDecodeError, IOError):
+                pass
 
-    @functools.lru_cache(maxsize=128)
-    def get_setting(self, key: str):
-        return self._settings.get(key)
+    def __getattr__(self, name: str) -> Any:
+        return self.data.get(name)
 
-    def set_setting(self, key: str, value):
-        self._settings[key] = value
-        self.get_setting.cache_clear()
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
 
-    def batch_update(self, updates: dict):
-        self._settings.update(updates)
-        self.get_setting.cache_clear()
+    def save(self) -> None:
+        with open(self.path, 'w') as f:
+            json.dump(self.data, f, indent=4)
 
-    def __getitem__(self, key):
-        val = self.get_setting(key)
-        if val is None:
-            raise KeyError(f'Configuration key {key} missing')
-        return val
-
-    def __setitem__(self, key, value):
-        self.set_setting(key, value)
-
-    def __delitem__(self, key):
-        if key in self._settings:
-            del self._settings[key]
-            self.get_setting.cache_clear()
-
-    def memory_footprint(self):
-        return sys.getsizeof(self._settings) + sys.getsizeof(self._cache)
-
-# Global instance for high-speed game state access
-config_registry = GameConfig()
+def get_game_config():
+    defaults = {
+        "resolution": [1920, 1080],
+        "vsync": True,
+        "master_volume": 0.8,
+        "keybinds": {"jump": "space", "crouch": "ctrl"}
+    }
+    return ConfigLoader(defaults)
