@@ -1,37 +1,53 @@
-import logging
+import struct
+from typing import Generator, Tuple
 
-class InputProcessor:
-    def __init__(self):
-        self.logger = logging.getLogger(__name__)
+class GamePacketProcessor:
+    """Processes and validates raw incoming byte streams for multiplayer game events."""
 
-    def validate_command(self, cmd_data):
-        if not isinstance(cmd_data, dict):
-            raise ValueError("invalid data structure")
+    HEADER = 0x7E
+
+    def __init__(self) -> None:
+        self._buffer = bytearray()
+
+    def process_stream(self, chunk: bytes) -> Generator[Tuple[bool, bytes], None, None]:
+        """Validates stream inputs on the fly, emitting verified payloads."""
+        self._buffer.extend(chunk)
         
-        required = {'action', 'payload'}
-        if not required.issubset(cmd_data.keys()):
-            raise KeyError(f"missing keys: {required - cmd_data.keys()}")
-            
-        if not isinstance(cmd_data['action'], str):
-            raise TypeError("action must be string")
-        return True
-
-    def process_loop(self, queue):
-        while True:
-            item = queue.get()
-            if item is None:
-                break
-            
-            try:
-                if self.validate_command(item):
-                    self.execute(item['action'], item['payload'])
-            except (ValueError, KeyError, TypeError) as e:
-                self.logger.warning(f"validation failure: {e}")
+        while len(self._buffer) >= 4:
+            if self._buffer[0] != self.HEADER:
+                self._buffer.pop(0)
                 continue
 
-    def execute(self, action, payload):
-        # Niche gaming logic: perform state transformation
-        state_map = {'move': 0x01, 'jump': 0x02, 'attack': 0x03}
-        opcode = state_map.get(action, 0x00)
-        if opcode:
-            print(f"Executing {action} with {payload}")
+            packet_len = self._buffer[1]
+            if packet_len < 4 or packet_len > 128:
+                self._buffer.pop(0)
+                continue
+
+            if len(self._buffer) < packet_len:
+                break
+
+            packet = self._buffer[:packet_len]
+            del self._buffer[:packet_len]
+
+            if self._validate_packet(packet):
+                # Yields True and the isolated event payload
+                yield True, bytes(packet[2:-1])
+            else:
+                # Yields False and the corrupted raw packet
+                yield False, bytes(packet)
+
+    def _validate_packet(self, packet: bytearray) -> bool:
+        """Performs XOR checksum validation and validates event bounds."""
+        if len(packet) < 4:
+            return False
+            
+        checksum = 0
+        for byte in packet[:-1]:
+            checksum ^= byte
+            
+        if checksum != packet[-1]:
+            return False
+
+        # Dynamic game validation constraint for incoming commands
+        opcode = packet[2]
+        return opcode in {0x01, 0x02, 0x03, 0x04}
