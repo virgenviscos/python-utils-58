@@ -1,32 +1,27 @@
-import random
 import time
-from functools import wraps
+import functools
+import random
 
-def jitter_delay(min_ms=50, max_ms=250):
-    """Injects non-deterministic latency to simulate game server feel."""
-    time.sleep(random.uniform(min_ms, max_ms) / 1000.0)
-
-def retry_on_fail(retries=3, backoff=0.5):
-    """Decorator for resilient game state synchronization."""
+def with_retry(max_attempts=3, backoff=0.5):
     def decorator(func):
-        @wraps(func)
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            last_ex = None
-            for i in range(retries):
+            attempts = 0
+            while attempts < max_attempts:
                 try:
                     return func(*args, **kwargs)
                 except Exception as e:
-                    last_ex = e
-                    time.sleep(backoff * (2 ** i))
-            raise last_ex
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        raise e
+                    delay = backoff * (2 ** (attempts - 1)) + random.uniform(0, 0.1)
+                    time.sleep(delay)
         return wrapper
     return decorator
 
-def calculate_hit_chance(attacker_stats, defender_stats, base_mod=0.75):
-    """Calculates evasion-adjusted hit probability using unconventional weighting."""
-    raw_chance = base_mod + (attacker_stats.get('acc', 0) * 0.1) - (defender_stats.get('eva', 0) * 0.05)
-    return max(0.05, min(0.95, raw_chance))
-
-def pack_entity_data(entity_id, **payload):
-    """Serializes entity state for low-bandwidth transport."""
-    return f"EID:{entity_id}|{'|'.join(f'{k}:{v}' for k, v in payload.items())}"
+@with_retry(max_attempts=5)
+def fetch_game_data(url):
+    # Simulate network instability for gaming API calls
+    if random.random() < 0.7:
+        raise ConnectionError("Server lag spike detected")
+    return {"status": "ready", "payload": "level_data_058"}
