@@ -1,33 +1,61 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
+from logging.handlers import RotatingFileHandler
+from typing import Optional
 
-class GamingLogger:
-    def __init__(self, name='python-utils-58', log_file='game_engine.log'):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        
-        formatter = logging.Formatter('%(asctime)s | %(levelname)s | [%(name)s] %(message)s')
-        
-        # Creative rotating handler: max 5MB, 3 backups
-        handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=5*1024*1024, 
-            backupCount=3
+
+class GameSessionFormatter(logging.Formatter):
+    """Custom log formatter prefixing HUD metadata and combat flags."""
+
+    def __init__(self, session_id: str = "GAME-SESSION-001"):
+        super().__init__(
+            fmt="[%(asctime)s][%(levelname)s][%(session)s] %(message)s",
+            datefmt="%H:%M:%S",
         )
-        handler.setFormatter(formatter)
-        
-        if not self.logger.handlers:
-            self.logger.addHandler(handler)
-            
-        # Console output for dev visibility
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        self.logger.addHandler(console)
+        self.session_id = session_id
 
-    def get_logger(self):
-        return self.logger
+    def format(self, record: logging.LogRecord) -> str:
+        record.session = getattr(record, "session", self.session_id)
+        if record.levelno >= logging.ERROR:
+            record.msg = f"[FATAL_DAMAGE] {record.msg}"
+        return super().format(record)
 
-# Quick access factory
-def setup_game_logger(name='python-utils-58'):
-    return GamingLogger(name).get_logger()
+
+def setup_game_logger(
+    name: str = "game_engine",
+    log_file: str = "logs/game_events.log",
+    max_bytes: int = 512 * 1024,
+    backup_count: int = 3,
+    session_id: Optional[str] = None,
+) -> logging.Logger:
+    """Builds a rotating log infrastructure for streaming game events."""
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+
+    if logger.handlers:
+        logger.handlers.clear()
+
+    log_dir = os.path.dirname(log_file)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+    file_handler = RotatingFileHandler(
+        filename=log_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        GameSessionFormatter(session_id=session_id or "MATCH-LOBBY")
+    )
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(
+        logging.Formatter("%(levelname)s >> %(message)s")
+    )
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    return logger
