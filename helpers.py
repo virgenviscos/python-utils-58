@@ -1,36 +1,39 @@
-import time
-import functools
-import random
+import json
+import os
+from typing import Any, Dict
 
-def exponential_backoff(retries=3, base_delay=1.0, max_delay=10.0):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < retries:
+class ConfigLoader:
+    def __init__(self, file_path: str, defaults: Dict[str, Any]):
+        self.path = file_path
+        self.config = defaults
+        self._load()
+
+    def _load(self) -> None:
+        if os.path.exists(self.path):
+            with open(self.path, 'r') as f:
                 try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    attempts += 1
-                    if attempts >= retries:
-                        raise e
-                    sleep_time = min(max_delay, base_delay * (2 ** (attempts - 1))) + random.uniform(0, 0.5)
-                    time.sleep(sleep_time)
-        return wrapper
-    return decorator
+                    user_data = json.load(f)
+                    self._recursive_update(self.config, user_data)
+                except json.JSONDecodeError:
+                    pass
 
-class NetworkThrottler:
-    def __init__(self, limit=5):
-        self.limit = limit
-        self.calls = []
+    def _recursive_update(self, base: Dict, patch: Dict) -> None:
+        for key, value in patch.items():
+            if isinstance(value, dict) and key in base:
+                self._recursive_update(base[key], value)
+            else:
+                base[key] = value
 
-    def __call__(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            now = time.time()
-            self.calls = [t for t in self.calls if now - t < 1]
-            if len(self.calls) >= self.limit:
-                time.sleep(0.1)
-            self.calls.append(time.time())
-            return func(*args, **kwargs)
-        return wrapper
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.config.get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.config[key]
+
+def load_game_config(path: str) -> ConfigLoader:
+    defaults = {
+        'graphics': {'resolution': '1920x1080', 'vsync': True},
+        'audio': {'master': 80, 'music': 50},
+        'gameplay': {'difficulty': 'normal'}
+    }
+    return ConfigLoader(path, defaults)
