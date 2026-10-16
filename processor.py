@@ -1,53 +1,37 @@
-import struct
-from typing import Generator, Tuple
+from typing import List, Dict, Union, Optional
 
-class GamePacketProcessor:
-    """Processes and validates raw incoming byte streams for multiplayer game events."""
+class GameStateProcessor:
+    """Processes raw gaming event telemetry into structured format."""
 
-    HEADER = 0x7E
+    def __init__(self, multiplier: float = 1.0) -> None:
+        self._multiplier: float = multiplier
 
-    def __init__(self) -> None:
-        self._buffer = bytearray()
+    def process_scores(self, raw_data: List[Union[int, float]]) -> List[float]:
+        """Applies global multiplier to a batch of player scores."""
+        return [float(score * self._multiplier) for score in raw_data]
 
-    def process_stream(self, chunk: bytes) -> Generator[Tuple[bool, bytes], None, None]:
-        """Validates stream inputs on the fly, emitting verified payloads."""
-        self._buffer.extend(chunk)
-        
-        while len(self._buffer) >= 4:
-            if self._buffer[0] != self.HEADER:
-                self._buffer.pop(0)
+    def aggregate_stats(self, data_map: Dict[str, List[int]]) -> Dict[str, float]:
+        """Calculates average values per stat category mapping."""
+        results: Dict[str, float] = {}
+        for key, values in data_map.items():
+            if not values:
+                results[key] = 0.0
                 continue
+            results[key] = sum(values) / len(values)
+        return results
 
-            packet_len = self._buffer[1]
-            if packet_len < 4 or packet_len > 128:
-                self._buffer.pop(0)
-                continue
+    def get_rank_bracket(self, score: float) -> str:
+        """Categorizes player performance based on raw score thresholds."""
+        brackets: List[tuple[int, str]] = [
+            (1000, "Elite"),
+            (500, "Pro"),
+            (0, "Novice")
+        ]
+        for limit, label in brackets:
+            if score >= limit:
+                return label
+        return "Unranked"
 
-            if len(self._buffer) < packet_len:
-                break
-
-            packet = self._buffer[:packet_len]
-            del self._buffer[:packet_len]
-
-            if self._validate_packet(packet):
-                # Yields True and the isolated event payload
-                yield True, bytes(packet[2:-1])
-            else:
-                # Yields False and the corrupted raw packet
-                yield False, bytes(packet)
-
-    def _validate_packet(self, packet: bytearray) -> bool:
-        """Performs XOR checksum validation and validates event bounds."""
-        if len(packet) < 4:
-            return False
-            
-        checksum = 0
-        for byte in packet[:-1]:
-            checksum ^= byte
-            
-        if checksum != packet[-1]:
-            return False
-
-        # Dynamic game validation constraint for incoming commands
-        opcode = packet[2]
-        return opcode in {0x01, 0x02, 0x03, 0x04}
+    def toggle_boost(self, active: bool) -> None:
+        """Dynamic modifier adjustment for gameplay telemetry scaling."""
+        self._multiplier = 2.0 if active else 1.0
