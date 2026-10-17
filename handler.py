@@ -1,39 +1,53 @@
-import zlib
-import pickle
-import base64
-from typing import Any
+import random
+import time
+from typing import Callable, Any, Type, Tuple
 
-class GameStatePacker:
-    """Compresses and encodes gaming session metadata."""
-    
-    @staticmethod
-    def serialize(data: Any, level: int = 9) -> str:
-        """Serializes arbitrary game objects into compact strings."""
-        raw_bytes = pickle.dumps(data)
-        compressed = zlib.compress(raw_bytes, level=level)
-        return base64.b64encode(compressed).decode('ascii')
 
-    @staticmethod
-    def deserialize(payload: str) -> Any:
-        """Reconstructs game objects from compressed strings."""
-        decoded = base64.b64decode(payload)
-        decompressed = zlib.decompress(decoded)
-        return pickle.loads(decompressed)
+class ServerLagException(Exception):
+    """Raised when a game server sync packet fails to transmit."""
+    pass
 
-    @classmethod
-    def patch_state(cls, state: dict, updates: dict) -> dict:
-        """Recursive-like merge for gaming state objects."""
-        for key, value in updates.items():
-            if isinstance(value, dict) and key in state:
-                state[key] = cls.patch_state(state[key], value)
-            else:
-                state[key] = value
-        return state
 
-# Example usage for session management
-if __name__ == '__main__':
-    packer = GameStatePacker()
-    initial_data = {'level': 1, 'hp': 100, 'items': ['sword', 'shield']}
-    blob = packer.serialize(initial_data)
-    restored = packer.deserialize(blob)
-    assert restored['hp'] == 100
+class NetworkRetryHandler:
+    """Network request handler using game-inspired exponential backoff with ping jitter."""
+
+    def __init__(
+        self,
+        max_respawn_attempts: int = 5,
+        base_cooldown: float = 0.2,
+        multiplier: float = 1.8,
+        jitter_bounds: Tuple[float, float] = (0.85, 1.15),
+        retryable_errors: Tuple[Type[Exception], ...] = (ConnectionError, TimeoutError, ServerLagException),
+    ):
+        self.max_attempts = max_respawn_attempts
+        self.base_cooldown = base_cooldown
+        self.multiplier = multiplier
+        self.jitter_bounds = jitter_bounds
+        self.retryable_errors = retryable_errors
+
+    def execute_with_retry(self, operation: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Executes operation with ping jitter and retry backoff."""
+        delay = self.base_cooldown
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                return operation(*args, **kwargs)
+            except self.retryable_errors as error:
+                if attempt == self.max_attempts:
+                    raise ServerLagException(
+                        f"Matchmaker packet dropped after {attempt} attempts: {error}"
+                    ) from error
+                
+                ping_jitter = random.uniform(*self.jitter_bounds)
+                time.sleep(delay * ping_jitter)
+                delay *= self.multiplier
+
+
+def retry_game_packet(attempts: int = 4, initial_delay: float = 0.1):
+    """Decorator for auto-retrying fragile matchmaker or telemetry network calls."""
+    handler = NetworkRetryHandler(max_respawn_attempts=attempts, base_cooldown=initial_delay)
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return handler.execute_with_retry(func, *args, **kwargs)
+        return wrapper
+    return decorator
