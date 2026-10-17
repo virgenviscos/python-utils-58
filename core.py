@@ -1,39 +1,48 @@
-import functools
-import time
+import math
+from typing import List, Dict, Set
 
-class GameTickOptimizer:
-    def __init__(self, cache_size=128):
-        self.cache_size = cache_size
-        self._memo = {}
-        self._order = []
 
-    def __call__(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            key = (args, tuple(sorted(kwargs.items())))
-            if key in self._memo:
-                return self._memo[key]
-            
-            result = func(*args, **kwargs)
-            
-            if len(self._memo) >= self.cache_size:
-                old_key = self._order.pop(0)
-                del self._memo[old_key]
-            
-            self._memo[key] = result
-            self._order.append(key)
-            return result
-        return wrapper
+class FastSpatialGrid:
+    """High-performance spatial partitioning using bitwise coordinate packing."""
 
-@GameTickOptimizer(cache_size=256)
-def calculate_physics_vector(force, mass, delta_time):
-    return (force / mass) * (delta_time ** 2) * 0.5
+    __slots__ = ("cell_size", "shift", "grid")
 
-def process_game_loop(entities):
-    start_time = time.perf_counter()
-    results = [
-        calculate_physics_vector(e.force, e.mass, 0.016)
-        for e in entities
-    ]
-    execution_time = time.perf_counter() - start_time
-    return results, execution_time
+    def __init__(self, cell_size: int = 64):
+        self.cell_size = cell_size
+        self.shift = (cell_size & -cell_size).bit_length() - 1
+        self.grid: Dict[int, Set[int]] = {}
+
+    def _hash_coords(self, x: float, y: float) -> int:
+        gx = int(x) >> self.shift
+        gy = int(y) >> self.shift
+        return (gx << 32) | (gy & 0xFFFFFFFF)
+
+    def insert(self, entity_id: int, x: float, y: float) -> None:
+        cell_key = self._hash_coords(x, y)
+        if cell_key not in self.grid:
+            self.grid[cell_key] = set()
+        self.grid[cell_key].add(entity_id)
+
+    def remove(self, entity_id: int, x: float, y: float) -> None:
+        cell_key = self._hash_coords(x, y)
+        if cell_key in self.grid:
+            self.grid[cell_key].discard(entity_id)
+            if not self.grid[cell_key]:
+                del self.grid[cell_key]
+
+    def query_radius(self, x: float, y: float, radius: float) -> List[int]:
+        min_gx = int(x - radius) >> self.shift
+        max_gx = int(x + radius) >> self.shift
+        min_gy = int(y - radius) >> self.shift
+        max_gy = int(y + radius) >> self.shift
+
+        found: List[int] = []
+        for gx in range(min_gx, max_gx + 1):
+            for gy in range(min_gy, max_gy + 1):
+                cell_key = (gx << 32) | (gy & 0xFFFFFFFF)
+                if cell_key in self.grid:
+                    found.extend(self.grid[cell_key])
+        return found
+
+    def clear(self) -> None:
+        self.grid.clear()
