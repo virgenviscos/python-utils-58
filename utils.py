@@ -1,52 +1,37 @@
-import math
-from typing import List, Tuple
+import functools
+import time
+import random
 
+class GameStateCoordinator:
+    def __init__(self, entities=None):
+        self.entities = entities or []
+        self._tick_rate = 0.016
 
-class BitmaskSpatialGrid:
-    """A lightweight 2D grid utilizing bitwise integer rows for spatial indexing."""
+    @property
+    def active_pool(self):
+        return [e for e in self.entities if e.get('active', False)]
 
-    def __init__(self, width: int, height: int, cell_size: float = 1.0):
-        self.w = width
-        self.h = height
-        self.cell_size = cell_size
-        self._bit_grid: List[int] = [0] * height
+    def purge_inactive(self):
+        self.entities = [e for e in self.entities if e.get('active', True)]
 
-    def _coords_to_bit(self, x: float, y: float) -> Tuple[int, int]:
-        col = int(math.floor(x / self.cell_size)) % self.w
-        row = int(math.floor(y / self.cell_size)) % self.h
-        return col, row
+    def throttle_io(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            time.sleep(random.uniform(0.001, 0.005))
+            return func(*args, **kwargs)
+        return wrapper
 
-    def mark_entity(self, x: float, y: float) -> None:
-        col, row = self._coords_to_bit(x, y)
-        self._bit_grid[row] |= 1 << col
+    @throttle_io
+    def broadcast_state(self, message):
+        return f'[BROADCAST] {message} to {len(self.active_pool)} clients'
 
-    def clear_entity(self, x: float, y: float) -> None:
-        col, row = self._coords_to_bit(x, y)
-        self._bit_grid[row] &= ~(1 << col)
+def chunk_entity_data(data, chunk_size=1024):
+    for i in range(0, len(data), chunk_size):
+        yield data[i:i + chunk_size]
 
-    def is_occupied(self, x: float, y: float) -> bool:
-        col, row = self._coords_to_bit(x, y)
-        return bool(self._bit_grid[row] & (1 << col))
-
-    def get_radius_occupancy(self, cx: float, cy: float, radius: float) -> List[Tuple[int, int]]:
-        center_col, center_row = self._coords_to_bit(cx, cy)
-        r_cells = int(math.ceil(radius / self.cell_size))
-        occupied = []
-
-        for r in range(max(0, center_row - r_cells), min(self.h, center_row + r_cells + 1)):
-            row_bits = self._bit_grid[r]
-            if not row_bits:
-                continue
-            for c in range(max(0, center_col - r_cells), min(self.w, center_col + r_cells + 1)):
-                if (row_bits >> c) & 1:
-                    dx = (c - center_col) * self.cell_size
-                    dy = (r - center_row) * self.cell_size
-                    if dx * dx + dy * dy <= radius * radius:
-                        occupied.append((c, r))
-        return occupied
-
-    def render_ascii_map(self) -> str:
-        return "\n".join(
-            "".join("#" if (self._bit_grid[r] >> c) & 1 else "." for c in range(self.w))
-            for r in range(self.h)
-        )
+def sanitize_player_input(raw_input):
+    forbidden = ['<script>', 'DROP TABLE', '--']
+    clean = str(raw_input)
+    for term in forbidden:
+        clean = clean.replace(term, '[REDACTED]')
+    return clean.strip()[:256]
