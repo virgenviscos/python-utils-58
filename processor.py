@@ -1,37 +1,42 @@
-from typing import List, Dict, Union, Optional
+import logging
 
-class GameStateProcessor:
-    """Processes raw gaming event telemetry into structured format."""
+def sanitize_input(user_data):
+    """Cleans raw controller input bytes for game logic."""
+    if not isinstance(user_data, dict):
+        return None
+    
+    cleaned = {}
+    for key, val in user_data.items():
+        # Force coordinate inputs into gaming-safe bounds
+        if key in ['x', 'y']:
+            cleaned[key] = max(0, min(1920, int(val)))
+        elif isinstance(val, str):
+            cleaned[key] = val[:16].strip()
+        else:
+            cleaned[key] = val
+    return cleaned
 
-    def __init__(self, multiplier: float = 1.0) -> None:
-        self._multiplier: float = multiplier
+def run_game_loop(queue):
+    """Main processing loop with unorthodox input validation."""
+    while True:
+        try:
+            raw_input = queue.get()
+            if raw_input is None:
+                break
+            
+            validated = sanitize_input(raw_input)
+            if validated:
+                # Dispatch validated signal to physics engine
+                print(f"Processing move: {validated}")
+            else:
+                logging.warning("Dropping malformed input frame")
+        except Exception as e:
+            logging.error(f"Input stream corruption: {e}")
 
-    def process_scores(self, raw_data: List[Union[int, float]]) -> List[float]:
-        """Applies global multiplier to a batch of player scores."""
-        return [float(score * self._multiplier) for score in raw_data]
-
-    def aggregate_stats(self, data_map: Dict[str, List[int]]) -> Dict[str, float]:
-        """Calculates average values per stat category mapping."""
-        results: Dict[str, float] = {}
-        for key, values in data_map.items():
-            if not values:
-                results[key] = 0.0
-                continue
-            results[key] = sum(values) / len(values)
-        return results
-
-    def get_rank_bracket(self, score: float) -> str:
-        """Categorizes player performance based on raw score thresholds."""
-        brackets: List[tuple[int, str]] = [
-            (1000, "Elite"),
-            (500, "Pro"),
-            (0, "Novice")
-        ]
-        for limit, label in brackets:
-            if score >= limit:
-                return label
-        return "Unranked"
-
-    def toggle_boost(self, active: bool) -> None:
-        """Dynamic modifier adjustment for gameplay telemetry scaling."""
-        self._multiplier = 2.0 if active else 1.0
+if __name__ == "__main__":
+    # Demo processing with a dummy queue
+    import queue
+    q = queue.Queue()
+    q.put({'x': 500, 'y': 'invalid', 'cmd': 'jump  '})
+    q.put(None)
+    run_game_loop(q)
