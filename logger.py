@@ -2,29 +2,35 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 
-class GamingLogger:
-    def __init__(self, name='game_engine', log_file='engine.log', max_bytes=1048576, backups=5):
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        
-        formatter = logging.Formatter('%(asctime)s | %(levelname)-8s | %(message)s')
-        
-        file_handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=backups)
-        file_handler.setFormatter(formatter)
-        
+LOG_LEVEL = logging.INFO
+LOG_FILE = "game_engine.log"
+MAX_BYTES = 5 * 1024 * 1024
+BACKUP_COUNT = 3
+
+def get_game_logger(name: str = "python-utils-58"):
+    """Generates a logger with rotating file capacity for gaming sessions."""
+    logger = logging.getLogger(name)
+    logger.setLevel(LOG_LEVEL)
+
+    if not logger.handlers:
+        formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s | %(name)s | %(message)s",
+            datefmt="%H:%M:%S"
+        )
+
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
-        
-        if not self.logger.handlers:
-            self.logger.addHandler(file_handler)
-            self.logger.addHandler(console_handler)
-            
-    def get_logger(self):
-        return self.logger
+        logger.addHandler(console_handler)
 
-def setup_game_logger():
-    return GamingLogger().get_logger()
+        file_handler = RotatingFileHandler(
+            LOG_FILE, 
+            maxBytes=MAX_BYTES, 
+            backupCount=BACKUP_COUNT
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
-if __name__ == '__main__':
-    log = setup_game_logger()
-    log.info('System initialized for gaming operations')
+    return logger
+
+# Instantiate standard logger for game modules
+logger = get_game_logger()
