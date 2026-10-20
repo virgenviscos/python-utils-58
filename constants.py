@@ -1,39 +1,27 @@
-import enum
-import logging
-from typing import Final, Dict, Any
+from typing import Final, Dict, Tuple
 
-class GameState(enum.IntEnum):
-    IDLE = 0
-    LOADING = 1
-    RUNNING = 2
-    CRASHED = 666
+# Gaming configuration constants for the engine
+FPS: Final[int] = 60
+GRID_SIZE: Final[Tuple[int, int]] = (1920, 1080)
 
-class ConfigError(Exception):
-    pass
-
-DEFAULT_SETTINGS: Final[Dict[str, Any]] = {
-    "max_players": 64,
-    "tick_rate": 60,
-    "dev_mode": False
+# Map color codes for terminal-based rendering
+COLOR_PALETTE: Final[Dict[str, str]] = {
+    'PLAYER': '\033[92m',
+    'ENEMY': '\033[91m',
+    'ITEM': '\033[93m',
+    'RESET': '\033[0m'
 }
 
-def validate_game_config(config: Dict[str, Any]) -> bool:
-    try:
-        if not isinstance(config.get("tick_rate"), int) or config["tick_rate"] <= 0:
-            raise ConfigError("invalid tick rate detected")
-        return True
-    except (KeyError, TypeError, ConfigError) as e:
-        logging.error(f"config validation failed: {e}")
-        return False
+PLAYER_MAX_HEALTH: Final[int] = 100
+DEFAULT_TICK_RATE: Final[float] = 1.0 / FPS
 
-class Sentinel:
-    def __repr__(self):
-        return "<NULL_STATE>"
+class GameState:
+    """Container for global gaming state markers."""
+    IDLE: Final[str] = "idle"
+    RUNNING: Final[str] = "active"
+    PAUSED: Final[str] = "suspended"
+    GAME_OVER: Final[str] = "terminated"
 
-NULL_VALUE = Sentinel()
-
-MAX_RETRY_ATTEMPTS: Final[int] = 3
-EXIT_CODES: Final[Dict[GameState, int]] = {
-    GameState.IDLE: 0,
-    GameState.CRASHED: 1
-}
+def get_render_color(entity_type: str) -> str:
+    """Retrieve ANSI color code based on entity type key."""
+    return COLOR_PALETTE.get(entity_type.upper(), COLOR_PALETTE['RESET'])
