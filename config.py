@@ -1,43 +1,41 @@
-import json
 import os
-from typing import Any, Dict
+import functools
+from typing import Any, Callable
 
-class GameConfig:
-    def __init__(self, filepath: str = 'settings.json', defaults: Dict[str, Any] = None):
-        self.path = filepath
-        self.data = defaults or {}
-        self.load()
+class ConfigCache:
+    _data = {}
+    _hot_keys = set()
 
-    def load(self) -> None:
-        if os.path.exists(self.path):
-            try:
-                with open(self.path, 'r') as f:
-                    loaded_data = json.load(f)
-                    self.data.update(loaded_data)
-            except (json.JSONDecodeError, IOError):
-                pass
+    @classmethod
+    def get(cls, key: str, default: Any = None) -> Any:
+        if key in cls._hot_keys:
+            return cls._data.get(key, default)
+        val = os.getenv(key, default)
+        if val is not None:
+            cls._data[key] = val
+            cls._hot_keys.add(key)
+        return val
 
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self.data.get(key, fallback)
+    @classmethod
+    def flush(cls):
+        cls._data.clear()
+        cls._hot_keys.clear()
 
-    def __getitem__(self, key: str) -> Any:
-        return self.data[key]
+def memoize_config(func: Callable) -> Callable:
+    cache = {}
+    @functools.wraps(func)
+    def wrapper(*args):
+        if args not in cache:
+            cache[args] = func(*args)
+        return cache[args]
+    return wrapper
 
-    def save(self) -> None:
-        try:
-            with open(self.path, 'w') as f:
-                json.dump(self.data, f, indent=4)
-        except IOError as e:
-            print(f'Config persistence failure: {e}')
+@memoize_config
+def get_game_setting(setting_name: str, fallback: str = "default") -> str:
+    return ConfigCache.get(f"GAME_{setting_name.upper()}", fallback)
 
-    def __repr__(self) -> str:
-        return f'<GameConfig items={len(self.data)} active={self.path}>'
+class Settings:
+    def __getattr__(self, name: str):
+        return get_game_setting(name)
 
-def get_app_config() -> GameConfig:
-    defaults = {
-        'resolution': [1920, 1080],
-        'fullscreen': True,
-        'volume': 0.8,
-        'sensitivity': 1.0
-    }
-    return GameConfig('settings.json', defaults=defaults)
+settings = Settings()
