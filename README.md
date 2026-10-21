@@ -1,50 +1,50 @@
 # python-utils-58
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-A lightweight Python utility library designed to streamline indie game development workflows, handling common low-level math and state operations. It provides high-performance tools for 2D coordinate systems, directional pathfinding helpers, and precise tick-rate regulators for Pygame or Pyglet loops.
+`python-utils-58` is a lightweight, high-performance toolkit designed to streamline game development tasks in Python. It provides optimized helpers for real-time memory monitoring, asset management, and cross-platform input handling.
 
 ## Features
 
-* **Fast Grid Generator:** Easily construct 2D coordinate grids and adjacency lists for hex and square tile maps.
-* **Delta-Time Tick Regulator:** High-accuracy frame-rate controller designed to prevent CPU spikes in continuous rendering loops.
-* **Vector2D Math Helpers:** Lightweight mathematical functions for distance calculation, rotation, and linear interpolation without the overhead of heavy scientific libraries.
+*   **Memory Tracer:** Track heap usage and object lifecycle in real-time to prevent memory leaks during complex game loops.
+*   **Asset Loader:** Asynchronous loading pipeline for textures and audio files, supporting automated caching and validation.
+*   **Input Mapper:** Simplify complex input handling by mapping raw keyboard/controller events to custom, remappable game actions.
+*   **Frame Stats:** Integrated profiler to calculate and log rolling average frame rates and execution time for specific logic blocks.
 
 ## Installation
 
-Install the package directly from PyPI:
+Install the library directly via pip:
 
 ```bash
 pip install python-utils-58
 ```
 
-## Quick Start
+For development mode, clone the repository and install the dependencies:
 
-Initialize a map grid and regulate your game loop with just a few lines of code:
+```bash
+git clone https://github.com/Developer/python-utils-58.git
+cd python-utils-58
+pip install -r requirements.txt
+```
+
+## Usage
+
+Easily monitor your game's performance and manage assets using the built-in decorators and utility classes:
 
 ```python
-from python_utils_58.grid import SquareGrid
-from python_utils_58.loop import FrameRegulator
+from utils_58 import FrameProfiler, AssetLoader
 
-# 1. Generate a 10x10 map grid
-game_map = SquareGrid(width=10, height=10)
-neighbors = game_map.get_neighbors(x=4, y=5)
+# Track execution time of the main update loop
+@FrameProfiler.log_time
+def update_game_state():
+    # Game logic here
+    pass
 
-# 2. Set up a steady 60 FPS loop
-regulator = FrameRegulator(target_fps=60)
-
-running = True
-while running:
-    # Get delta time in seconds
-    dt = regulator.tick()
-    
-    # Game logic update using dt goes here
-    print(f"Loop running. Delta time: {dt:.4f}s")
-    
-    # Break immediately for demonstration purposes
-    running = False
+# Load a batch of game textures asynchronously
+loader = AssetLoader()
+loader.load_batch(['player.png', 'background.jpg', 'enemy.png'])
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
