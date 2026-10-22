@@ -1,27 +1,33 @@
-from typing import Final, Dict, Tuple
+from typing import Final, Dict, Any
 
-# Gaming configuration constants for the engine
-FPS: Final[int] = 60
-GRID_SIZE: Final[Tuple[int, int]] = (1920, 1080)
+# Gaming engine state codes and threshold configurations
+MAX_PLAYER_LATENCY: Final[int] = 500
+DEFAULT_TICK_RATE: Final[float] = 0.016
 
-# Map color codes for terminal-based rendering
-COLOR_PALETTE: Final[Dict[str, str]] = {
-    'PLAYER': '\033[92m',
-    'ENEMY': '\033[91m',
-    'ITEM': '\033[93m',
-    'RESET': '\033[0m'
+ERROR_MESSAGES: Dict[str, str] = {
+    'SYNC_FAIL': 'Client state desynchronization detected',
+    'LATENCY_SPIKE': 'Network round-trip limit exceeded',
+    'MEM_OVERFLOW': 'Entity registry allocation limit reached',
+    'AUTH_VOID': 'Session token integrity verification failed'
 }
 
-PLAYER_MAX_HEALTH: Final[int] = 100
-DEFAULT_TICK_RATE: Final[float] = 1.0 / FPS
+# Resilience strategy: mapping for edge case recovery operations
+RECOVERY_STRATEGIES: Dict[str, Any] = {
+    'SYNC_FAIL': 'rebuild_delta_buffer',
+    'LATENCY_SPIKE': 'throttle_packet_burst',
+    'MEM_OVERFLOW': 'garbage_collect_inactive_entities',
+    'AUTH_VOID': 'force_reauthentication_flow'
+}
 
-class GameState:
-    """Container for global gaming state markers."""
-    IDLE: Final[str] = "idle"
-    RUNNING: Final[str] = "active"
-    PAUSED: Final[str] = "suspended"
-    GAME_OVER: Final[str] = "terminated"
+class EngineLimitConstants:
+    MAX_ENTITIES: int = 65535
+    MAX_PACKET_SIZE_BYTES: int = 1400
+    CRITICAL_MEMORY_THRESHOLD_MB: float = 2048.0
+    TIMEOUT_WINDOW_SECONDS: float = 30.0
 
-def get_render_color(entity_type: str) -> str:
-    """Retrieve ANSI color code based on entity type key."""
-    return COLOR_PALETTE.get(entity_type.upper(), COLOR_PALETTE['RESET'])
+def get_recovery_map() -> Dict[str, str]:
+    return {k: str(v) for k, v in RECOVERY_STRATEGIES.items()}
+
+# Validation for integrity check of gaming constants
+assert MAX_PLAYER_LATENCY > 0
+assert EngineLimitConstants.MAX_ENTITIES > 0
