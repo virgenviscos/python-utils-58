@@ -1,37 +1,30 @@
-import functools
 import time
+import functools
 import random
 
-class GameStateCoordinator:
-    def __init__(self, entities=None):
-        self.entities = entities or []
-        self._tick_rate = 0.016
-
-    @property
-    def active_pool(self):
-        return [e for e in self.entities if e.get('active', False)]
-
-    def purge_inactive(self):
-        self.entities = [e for e in self.entities if e.get('active', True)]
-
-    def throttle_io(func):
+def with_retry(max_attempts=3, backoff=1.0):
+    def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            time.sleep(random.uniform(0.001, 0.005))
-            return func(*args, **kwargs)
+            attempts = 0
+            while attempts < max_attempts:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    attempts += 1
+                    if attempts >= max_attempts:
+                        raise e
+                    sleep_time = backoff * (2 ** (attempts - 1)) + random.uniform(0, 0.1)
+                    time.sleep(sleep_time)
         return wrapper
+    return decorator
 
-    @throttle_io
-    def broadcast_state(self, message):
-        return f'[BROADCAST] {message} to {len(self.active_pool)} clients'
+def network_request(endpoint):
+    # Simulate volatile game server connectivity
+    if random.random() < 0.7:
+        raise ConnectionError("Server ping timeout")
+    return {"status": "success", "payload": "data_packet_0x58"}
 
-def chunk_entity_data(data, chunk_size=1024):
-    for i in range(0, len(data), chunk_size):
-        yield data[i:i + chunk_size]
-
-def sanitize_player_input(raw_input):
-    forbidden = ['<script>', 'DROP TABLE', '--']
-    clean = str(raw_input)
-    for term in forbidden:
-        clean = clean.replace(term, '[REDACTED]')
-    return clean.strip()[:256]
+@with_retry(max_attempts=5, backoff=0.5)
+def fetch_game_data(url):
+    return network_request(url)
