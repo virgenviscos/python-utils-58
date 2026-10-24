@@ -1,41 +1,37 @@
+import json
 import os
-import functools
-from typing import Any, Callable
+from typing import Any, Dict
 
-class ConfigCache:
-    _data = {}
-    _hot_keys = set()
+class GameConfig:
+    """Dynamic configuration loader using attribute magic."""
+    def __init__(self, path: str, defaults: Dict[str, Any]):
+        self._path = path
+        self._data = defaults.copy()
+        self._load_file()
 
-    @classmethod
-    def get(cls, key: str, default: Any = None) -> Any:
-        if key in cls._hot_keys:
-            return cls._data.get(key, default)
-        val = os.getenv(key, default)
-        if val is not None:
-            cls._data[key] = val
-            cls._hot_keys.add(key)
-        return val
+    def _load_file(self) -> None:
+        if os.path.exists(self._path):
+            with open(self._path, 'r') as f:
+                self._data.update(json.load(f))
 
-    @classmethod
-    def flush(cls):
-        cls._data.clear()
-        cls._hot_keys.clear()
+    def __getattr__(self, name: str) -> Any:
+        return self._data.get(name)
 
-def memoize_config(func: Callable) -> Callable:
-    cache = {}
-    @functools.wraps(func)
-    def wrapper(*args):
-        if args not in cache:
-            cache[args] = func(*args)
-        return cache[args]
-    return wrapper
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name.startswith('_'):
+            super().__setattr__(name, value)
+        else:
+            self._data[name] = value
 
-@memoize_config
-def get_game_setting(setting_name: str, fallback: str = "default") -> str:
-    return ConfigCache.get(f"GAME_{setting_name.upper()}", fallback)
+    def save(self) -> None:
+        with open(self._path, 'w') as f:
+            json.dump(self._data, f, indent=4)
 
-class Settings:
-    def __getattr__(self, name: str):
-        return get_game_setting(name)
-
-settings = Settings()
+def get_config(filename: str = 'settings.json') -> GameConfig:
+    defaults = {
+        "resolution": "1920x1080",
+        "vsync": True,
+        "fov": 90,
+        "volume": 0.8
+    }
+    return GameConfig(filename, defaults)
