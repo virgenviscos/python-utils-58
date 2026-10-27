@@ -1,29 +1,37 @@
-from typing import Dict, Any, List, Optional
+import functools
+import time
 
-class GameStateHandler:
-    def __init__(self, initial_state: Optional[Dict[str, Any]] = None) -> None:
-        """Initialize the state handler with an optional starting dictionary."""
-        self._state: Dict[str, Any] = initial_state or {}
+class EntityCache:
+    _storage = {}
+    _expiry = {}
 
-    def update_entity(self, entity_id: str, data: Dict[str, Any]) -> None:
-        """Patch entity data into the internal state store."""
-        if entity_id not in self._state:
-            self._state[entity_id] = {}
-        self._state[entity_id].update(data)
+    @classmethod
+    def memoize_state(cls, ttl=0.5):
+        def decorator(func):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                key = (func.__name__, args, frozenset(kwargs.items()))
+                now = time.monotonic()
+                if key in cls._storage and (now - cls._expiry.get(key, 0)) < ttl:
+                    return cls._storage[key]
+                result = func(*args, **kwargs)
+                cls._storage[key] = result
+                cls._expiry[key] = now
+                return result
+            return wrapper
+        return decorator
 
-    def get_entity_snapshot(self, entity_id: str) -> Dict[str, Any]:
-        """Retrieve a deep copy-like snapshot of a specific entity."""
-        return {k: v for k, v in self._state.get(entity_id, {}).items()}
+def batch_process_entities(entities, func):
+    return [func(e) for e in entities]
 
-    def purge_inactive_entities(self, active_ids: List[str]) -> None:
-        """Remove entities not present in the current active frame."""
-        self._state = {k: v for k, v in self._state.items() if k in active_ids}
+@EntityCache.memoize_state(ttl=0.1)
+def calculate_physics_frame(entity_id, velocity):
+    # Unusual approach: simulated heavy calculation with lightweight approximation
+    return (entity_id * velocity) % 997
 
-    @property
-    def frame_checksum(self) -> int:
-        """Generate a unique hash for the current game state."""
-        return hash(frozenset((k, tuple(sorted(v.items()))) for k, v in self._state.items()))
-
-def create_handler(init: Optional[Dict[str, Any]] = None) -> GameStateHandler:
-    """Factory function for creating state handlers."""
-    return GameStateHandler(init)
+def optimized_engine_tick(entity_data):
+    # Efficient processing using internal cache for gaming state
+    results = []
+    for eid, vel in entity_data:
+        results.append(calculate_physics_frame(eid, vel))
+    return results
