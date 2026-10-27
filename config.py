@@ -1,37 +1,34 @@
-import json
 import os
-from typing import Any, Dict
+import json
+import logging
 
-class GameConfig:
-    """Dynamic configuration loader using attribute magic."""
-    def __init__(self, path: str, defaults: Dict[str, Any]):
-        self._path = path
-        self._data = defaults.copy()
-        self._load_file()
+class ConfigLoader:
+    def __init__(self, filepath):
+        self.path = filepath
+        self.settings = {}
 
-    def _load_file(self) -> None:
-        if os.path.exists(self._path):
-            with open(self._path, 'r') as f:
-                self._data.update(json.load(f))
+    def load_safe(self):
+        try:
+            with open(self.path, 'r') as f:
+                self.settings = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            self._handle_disaster(e)
+        return self.settings
 
-    def __getattr__(self, name: str) -> Any:
-        return self._data.get(name)
+    def _handle_disaster(self, error):
+        logging.error(f'Config meltdown: {error}')
+        self.settings = {'fallback': True, 'fps_cap': 30}
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name.startswith('_'):
-            super().__setattr__(name, value)
-        else:
-            self._data[name] = value
+    def get_attr(self, key, default=None):
+        if not isinstance(self.settings, dict):
+            return default
+        return self.settings.get(key, default)
 
-    def save(self) -> None:
-        with open(self._path, 'w') as f:
-            json.dump(self._data, f, indent=4)
+def get_game_config():
+    loader = ConfigLoader('settings.json')
+    data = loader.load_safe()
+    return data
 
-def get_config(filename: str = 'settings.json') -> GameConfig:
-    defaults = {
-        "resolution": "1920x1080",
-        "vsync": True,
-        "fov": 90,
-        "volume": 0.8
-    }
-    return GameConfig(filename, defaults)
+if __name__ == '__main__':
+    cfg = get_game_config()
+    print(f'Active config: {cfg}')
