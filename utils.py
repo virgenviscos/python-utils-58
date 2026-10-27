@@ -1,30 +1,30 @@
 import time
-import functools
 import random
+import functools
+from typing import Callable, Any
 
-def with_retry(max_attempts=3, backoff=1.0):
-    def decorator(func):
+def backoff_retry(max_retries: int = 3, base_delay: float = 0.5):
+    def decorator(func: Callable):
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_attempts:
+        def wrapper(*args, **kwargs) -> Any:
+            retries = 0
+            while retries < max_retries:
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
-                    attempts += 1
-                    if attempts >= max_attempts:
+                except (ConnectionError, TimeoutError) as e:
+                    retries += 1
+                    if retries >= max_retries:
                         raise e
-                    sleep_time = backoff * (2 ** (attempts - 1)) + random.uniform(0, 0.1)
+                    # jittered exponential backoff for game network resilience
+                    sleep_time = (base_delay * (2 ** (retries - 1))) + (random.random() * 0.1)
                     time.sleep(sleep_time)
+            return None
         return wrapper
     return decorator
 
-def network_request(endpoint):
-    # Simulate volatile game server connectivity
+@backoff_retry(max_retries=5)
+def fetch_game_state(endpoint: str):
+    # simulates network jitter in gaming scenarios
     if random.random() < 0.7:
-        raise ConnectionError("Server ping timeout")
-    return {"status": "success", "payload": "data_packet_0x58"}
-
-@with_retry(max_attempts=5, backoff=0.5)
-def fetch_game_data(url):
-    return network_request(url)
+        raise ConnectionError("packet loss detected")
+    return {"status": "ready", "tick": 128}
