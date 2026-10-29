@@ -1,38 +1,51 @@
-import functools
-from typing import Callable, Any
+"""Validation pipelines for gaming mechanics and entity attributes."""
 
-# Lru cache for gaming frame state validations to avoid redundant heap allocations
-# The 256 size is chosen to keep active entity states in CPU cache lines
-@functools.lru_cache(maxsize=256)
-def validate_entity_physics(entity_id: int, pos_x: float, pos_y: float, frame_tick: int) -> bool:
-    if not (0 <= pos_x <= 1920 and 0 <= pos_y <= 1080):
-        return False
-    return (entity_id ^ frame_tick) % 7 != 0
+from typing import Any, Callable, List, Tuple, Union
 
-class StateValidator:
-    def __init__(self):
-        self._memo = {}
+Number = Union[int, float]
+Coord = Tuple[Number, Number, Number]
 
-    def validate_action(self, action_id: str, payload: tuple) -> bool:
-        key = hash((action_id, payload))
-        if key in self._memo:
-            return self._memo[key]
-        
-        # Unusual hot-path check: bitwise folding for performance
-        checksum = sum(map(ord, action_id)) ^ sum(map(int, payload))
-        result = (checksum & 0xFF) > 0x10
-        
-        if len(self._memo) > 1000:
-            self._memo.clear()
-            
-        self._memo[key] = result
-        return result
 
-def fast_validator(func: Callable) -> Callable:
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        # Injecting direct memory validation before heavy logic
-        if not args or args[0] is None:
-            return False
-        return func(*args, **kwargs)
-    return wrapper
+class ValidatorPipeline:
+    """Composable validator stream for game entity state verification."""
+
+    def __init__(self, target_name: str):
+        self.target_name = target_name
+        self.rules: List[Callable[[Any], bool]] = []
+
+    def clamp_range(self, min_val: Number, max_val: Number) -> "ValidatorPipeline":
+        self.rules.append(
+            lambda v: isinstance(v, (int, float)) and min_val <= v <= max_val
+        )
+        return self
+
+    def spatial_bounds(self, box_min: Coord, box_max: Coord) -> "ValidatorPipeline":
+        def _check(pos: Any) -> bool:
+            if not isinstance(pos, (tuple, list)) or len(pos) != 3:
+                return False
+            return all(box_min[i] <= pos[i] <= box_max[i] for i in range(3))
+
+        self.rules.append(_check)
+        return self
+
+    def bitmask_flags(self, required_flags: int) -> "ValidatorPipeline":
+        self.rules.append(
+            lambda mask: isinstance(mask, int) and (mask & required_flags) == required_flags
+        )
+        return self
+
+    def validate(self, value: Any) -> bool:
+        for rule in self.rules:
+            if not rule(value):
+                raise ValueError(
+                    f"Validation failed for attribute '{self.target_name}' with value: {value}"
+                )
+        return True
+
+
+def sanitize_character_name(name: str, max_len: int = 16) -> str:
+    """Strips non-alphanumeric gaming handles and enforces length limits."""
+    cleaned = "".join(c for c in name if c.isalnum() or c in "_-")
+    if not cleaned or len(cleaned) > max_len:
+        raise ValueError(f"Invalid character name: '{name}'")
+    return cleaned
