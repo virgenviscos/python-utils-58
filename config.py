@@ -1,34 +1,36 @@
-import os
 import json
-import logging
+import os
+from typing import Any, Dict
 
-class ConfigLoader:
-    def __init__(self, filepath):
-        self.path = filepath
-        self.settings = {}
+class GameConfig:
+    """Dynamic configuration loader with fallback defaults."""
+    def __init__(self, file_path: str, defaults: Dict[str, Any]):
+        self.file_path = file_path
+        self.settings = defaults
+        self._load()
 
-    def load_safe(self):
-        try:
-            with open(self.path, 'r') as f:
-                self.settings = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            self._handle_disaster(e)
-        return self.settings
+    def _load(self) -> None:
+        if os.path.exists(self.file_path):
+            with open(self.file_path, 'r') as f:
+                try:
+                    user_data = json.load(f)
+                    self.settings.update(user_data)
+                except json.JSONDecodeError:
+                    pass
 
-    def _handle_disaster(self, error):
-        logging.error(f'Config meltdown: {error}')
-        self.settings = {'fallback': True, 'fps_cap': 30}
+    def __getattr__(self, name: str) -> Any:
+        return self.settings.get(name)
 
-    def get_attr(self, key, default=None):
-        if not isinstance(self.settings, dict):
-            return default
-        return self.settings.get(key, default)
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.settings[key] = value
+        with open(self.file_path, 'w') as f:
+            json.dump(self.settings, f, indent=4)
 
-def get_game_config():
-    loader = ConfigLoader('settings.json')
-    data = loader.load_safe()
-    return data
+    def reset(self) -> None:
+        if os.path.exists(self.file_path):
+            os.remove(self.file_path)
 
-if __name__ == '__main__':
-    cfg = get_game_config()
-    print(f'Active config: {cfg}')
+# Example Usage:
+# cfg = GameConfig('settings.json', {'volume': 80, 'fullscreen': True})
+# print(cfg.volume)
+# cfg['volume'] = 90
