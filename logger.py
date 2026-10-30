@@ -1,55 +1,34 @@
 import logging
 from logging.handlers import RotatingFileHandler
-from typing import Dict, Any
+import os
 
-class ArcadeLogFormatter(logging.Formatter):
-    """Custom formatter that injects game-themed visual indicators into logs."""
-    ICON_MAP = {
-        "DEBUG": "[🔍 DBG]",
-        "INFO": "[⚔️ ACT]",
-        "WARNING": "[⚠️ WRN]",
-        "ERROR": "[💥 ERR]",
-        "CRITICAL": "[☠️ KO!]"
-    }
-
-    def format(self, record: logging.LogRecord) -> str:
-        icon = self.ICON_MAP.get(record.levelname, f"[{record.levelname}]")
-        record.game_icon = icon
-        return super().format(record)
-
-
-class MatchSessionRotatingHandler(RotatingFileHandler):
-    """Rotating file handler capable of forcing rollover when a game match changes."""
-    def __init__(self, filename: str, max_bytes: int = 512 * 1024, backup_count: int = 5):
-        super().__init__(filename, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
-
-    def rotate_for_new_match(self, match_id: str) -> None:
-        """Manually force log rotation upon starting a new game match."""
-        if self.stream:
-            self.stream.flush()
-            self.stream.close()
-            self.stream = None
-        self.doRollover()
-        if self.stream:
-            self.stream.write(f"=== MATCH START: {match_id} ===\n")
-            self.stream.flush()
-
-
-def setup_game_logger(
-    logger_name: str = "game_telemetry",
-    file_path: str = "session.log",
-    max_kb: int = 256,
-    backups: int = 3
-) -> logging.Logger:
-    """Configures and returns a rotating logger setup tailored for gaming metrics."""
-    logger = logging.getLogger(logger_name)
+def get_game_logger(name='python-utils-58', log_file='game_state.log', max_bytes=1048576, backup_count=3):
+    """
+    A slightly unorthodox logger that treats game logs like a ring buffer
+    because nobody likes 50GB of debug trace logs on their SSD.
+    """
+    logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-
+    
     if not logger.handlers:
-        handler = MatchSessionRotatingHandler(file_path, max_bytes=max_kb * 1024, backup_count=backups)
-        fmt = "%(asctime)s | %(game_icon)s | %(name)s :: %(message)s"
-        formatter = ArcadeLogFormatter(fmt=fmt, datefmt="%H:%M:%S")
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-
+        formatter = logging.Formatter('%(asctime)s | [%(levelname)s] | %(message)s')
+        
+        # File rotation for persistent session history
+        file_handler = RotatingFileHandler(
+            log_file, 
+            maxBytes=max_bytes, 
+            backupCount=backup_count
+        )
+        file_handler.setFormatter(formatter)
+        
+        # Console output for real-time developer feedback
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+        
     return logger
+
+# Quick access instance
+log = get_game_logger()
