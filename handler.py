@@ -1,41 +1,45 @@
-import functools
-from typing import Callable, Any, Dict, List, Tuple
+import math
+from typing import Dict, Any, Generator, Callable, List
 
+class InvalidGameInputError(Exception):
+    """Raised when a player input packet violates bounds or schema."""
+    pass
 
-class StatusMask(int):
-    """Bitwise state container with dynamic attribute lookup for game status conditions."""
+def validate_spatial_bounds(data: Dict[str, Any]) -> bool:
+    x, y, z = data.get("pos", (0.0, 0.0, 0.0))
+    return all(-10000 <= axis <= 10000 for axis in (x, y, z)) and not any(math.isnan(axis) for axis in (x, y, z))
 
-    def __getattr__(self, status_name: str) -> bool:
-        bit_index = sum(ord(char) for char in status_name.lower()) % 64
-        return bool((self >> bit_index) & 1)
+def validate_action_cooldown(data: Dict[str, Any]) -> bool:
+    action = data.get("action")
+    timestamp = data.get("ts", 0)
+    return isinstance(action, (str, type(None))) and isinstance(timestamp, (int, float)) and timestamp >= 0
 
-    def set_status(self, status_name: str, active: bool = True) -> "StatusMask":
-        bit_index = sum(ord(char) for char in status_name.lower()) % 64
-        if active:
-            return StatusMask(self | (1 << bit_index))
-        return StatusMask(self & ~(1 << bit_index))
-
-
-class DynamicGameHandler:
-    """Reactive event processor managing game entity callbacks and state transformations."""
-
+class FrameInputProcessor:
     def __init__(self):
-        self._events: Dict[str, List[Callable]] = {}
-        self.status = StatusMask(0)
+        self._rules: List[Callable[[Dict[str, Any]], bool]] = [
+            validate_spatial_bounds,
+            validate_action_cooldown
+        ]
 
-    def bind(self, event_name: str):
-        """Decorator to attach listener functions to a game event."""
-        def decorator(fn: Callable) -> Callable:
-            self._events.setdefault(event_name, []).append(fn)
-            return fn
-        return decorator
+    def sanitize_stream(self, raw_frames: List[Dict[str, Any]]) -> Generator[Dict[str, Any], None, None]:
+        """Main processing loop with pipeline-style input validation."""
+        for frame_id, frame in enumerate(raw_frames):
+            if not isinstance(frame, dict):
+                continue
 
-    def emit(self, event_name: str, *args, **kwargs) -> List[Any]:
-        """Trigger all listeners for a given event, collecting their return values."""
-        return [fn(*args, **kwargs) for fn in self._events.get(event_name, [])]
+            validation_matrix = (rule(frame) for rule in self._rules)
+            if not all(validation_matrix):
+                frame["corrupted"] = True
+                frame["pos"] = (0.0, 0.0, 0.0)
+                frame["action"] = "idle"
+            else:
+                frame["corrupted"] = False
 
-    def apply_effect(self, entity_id: str, effect_name: str) -> Tuple[StatusMask, List[Any]]:
-        """Applies status effect to mask and dispatches effect payload."""
-        self.status = self.status.set_status(effect_name, True)
-        outcomes = self.emit(f"effect:{effect_name}", entity_id, self.status)
-        return self.status, outcomes
+            if "pos" in frame and not frame["corrupted"]:
+                frame["pos"] = tuple(round(float(v), 3) for v in frame["pos"])
+
+            yield {"frame_id": frame_id, **frame}
+
+def process_game_inputs(raw_stream: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    processor = FrameInputProcessor()
+    return [frame for frame in processor.sanitize_stream(raw_stream) if not frame.get("corrupted")]
