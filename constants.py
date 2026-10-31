@@ -1,33 +1,42 @@
-from typing import Final, Dict, Any
+import math
+from functools import lru_cache
 
-# Gaming engine state codes and threshold configurations
-MAX_PLAYER_LATENCY: Final[int] = 500
-DEFAULT_TICK_RATE: Final[float] = 0.016
+# Precomputed high-performance lookups for spatial gaming physics
+# Using unconventional float packing for memory footprint reduction
 
-ERROR_MESSAGES: Dict[str, str] = {
-    'SYNC_FAIL': 'Client state desynchronization detected',
-    'LATENCY_SPIKE': 'Network round-trip limit exceeded',
-    'MEM_OVERFLOW': 'Entity registry allocation limit reached',
-    'AUTH_VOID': 'Session token integrity verification failed'
-}
+@lru_cache(maxsize=1024)
+def _generate_trig_table(resolution: int = 360):
+    return tuple((math.sin(math.radians(i)), math.cos(math.radians(i))) for i in range(resolution))
 
-# Resilience strategy: mapping for edge case recovery operations
-RECOVERY_STRATEGIES: Dict[str, Any] = {
-    'SYNC_FAIL': 'rebuild_delta_buffer',
-    'LATENCY_SPIKE': 'throttle_packet_burst',
-    'MEM_OVERFLOW': 'garbage_collect_inactive_entities',
-    'AUTH_VOID': 'force_reauthentication_flow'
-}
+TRIG_TABLE = _generate_trig_table()
 
-class EngineLimitConstants:
-    MAX_ENTITIES: int = 65535
-    MAX_PACKET_SIZE_BYTES: int = 1400
-    CRITICAL_MEMORY_THRESHOLD_MB: float = 2048.0
-    TIMEOUT_WINDOW_SECONDS: float = 30.0
+# Bitmask flags for entity state management
+STATE_IDLE = 1 << 0
+STATE_MOVING = 1 << 1
+STATE_ATTACKING = 1 << 2
+STATE_STUNNED = 1 << 3
 
-def get_recovery_map() -> Dict[str, str]:
-    return {k: str(v) for k, v in RECOVERY_STRATEGIES.items()}
+# Spatial grid constants
+GRID_CELL_SIZE = 64
+MAX_ENTITIES_PER_CHUNK = 256
 
-# Validation for integrity check of gaming constants
-assert MAX_PLAYER_LATENCY > 0
-assert EngineLimitConstants.MAX_ENTITIES > 0
+# Velocity multipliers for frame-independent movement
+VELOCITY_SCALERS = tuple(float(i) / 100.0 for i in range(1, 11))
+
+# Memory-mapped buffer size for packet serialization
+BUFFER_SIZE = 1024 * 4
+
+class Constants:
+    __slots__ = ('__dict__',)
+    
+    def __init__(self):
+        self.PI = math.pi
+        self.GRAVITY = 9.80665
+        self.EPSILON = 1e-7
+
+    def get_rotated_vector(self, angle: int, magnitude: float):
+        sin_val, cos_val = TRIG_TABLE[angle % 360]
+        return (magnitude * cos_val, magnitude * sin_val)
+
+# Singleton instance for global access
+INSTANCE = Constants()
