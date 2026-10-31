@@ -1,30 +1,48 @@
-import random
-import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, Generator, List, Tuple
 
-def loot_generator(rarity_table):
-    target = random.random()
-    accumulator = 0.0
-    for item, chance in rarity_table.items():
-        accumulator += chance
-        if target <= accumulator:
-            return item
-    return list(rarity_table.keys())[-1]
 
-def cooldown_tracker(last_cast, duration):
-    return time.time() - last_cast >= duration
+@dataclass
+class PlayerCommand:
+    player_id: int
+    action_type: str
+    target_coords: Tuple[float, float]
+    frame_timestamp: int
+    payload: Dict[str, Any] = field(default_factory=dict)
 
-def normalize_stats(stats, target_sum):
-    total = sum(stats.values())
-    if total == 0:
-        return {k: target_sum // len(stats) for k in stats}
-    return {k: int((v / total) * target_sum) for k, v in stats.items()}
 
-def packet_throttler(queue, max_size=64):
-    return queue[-max_size:]
+class FrameInputProcessor:
+    def __init__(self, max_coord: float = 1000.0, max_delta_per_frame: float = 50.0):
+        self.max_coord = max_coord
+        self.max_delta = max_delta_per_frame
+        self.last_positions: Dict[int, Tuple[float, float]] = {}
+        self.valid_actions = {"MOVE", "ATTACK", "CAST_SPELL", "EMOTE"}
 
-def calculate_dps(damage_dealt, duration):
-    return round(damage_dealt / duration, 2) if duration > 0 else 0.0
+    def _validate_command(self, cmd: PlayerCommand) -> bool:
+        if cmd.action_type not in self.valid_actions:
+            return False
 
-def sequence_buffer(history, new_input, limit=10):
-    history.append(new_input)
-    return history[-limit:]
+        x, y = cmd.target_coords
+        if not (-self.max_coord <= x <= self.max_coord and -self.max_coord <= y <= self.max_coord):
+            return False
+
+        if cmd.player_id in self.last_positions and cmd.action_type == "MOVE":
+            lx, ly = self.last_positions[cmd.player_id]
+            dist_sq = (x - lx) ** 2 + (y - ly) ** 2
+            if dist_sq > self.max_delta**2:
+                return False
+
+        return True
+
+    def process_stream(
+        self, raw_stream: List[PlayerCommand]
+    ) -> Generator[PlayerCommand, None, None]:
+        for raw_cmd in raw_stream:
+            match raw_cmd:
+                case PlayerCommand(player_id=pid, frame_timestamp=ts) if pid > 0 and ts >= 0:
+                    if self._validate_command(raw_cmd):
+                        if raw_cmd.action_type == "MOVE":
+                            self.last_positions[pid] = raw_cmd.target_coords
+                        yield raw_cmd
+                case _:
+                    continue
