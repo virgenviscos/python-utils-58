@@ -1,38 +1,32 @@
-import time
-import functools
-import random
-
-class NetworkGlitch(Exception):
-    """Custom exception for gaming network instability."""
+class GamingException(Exception):
+    """Base exception for all gaming-related errors."""
     pass
 
-def retry_network_op(attempts=3, delay=1.0, backoff=2.0):
-    """
-    Decorator implementing exponential backoff with jitter.
-    Uses a chaotic retry strategy for robust connection persistence.
-    """
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            tries, current_delay = attempts, delay
-            while tries > 0:
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    tries -= 1
-                    if tries == 0:
-                        raise NetworkGlitch(f"Persistent failure after {attempts} attempts: {e}")
-                    jitter = random.uniform(0, 0.5 * current_delay)
-                    time.sleep(current_delay + jitter)
-                    current_delay *= backoff
-        return wrapper
-    return decorator
+class InventoryFullError(GamingException):
+    """Raised when items exceed capacity."""
+    def __init__(self, item_id, capacity):
+        super().__init__(f"Inventory full: cannot add {item_id} (max {capacity})")
 
-def execute_with_rescue(func, *args, **kwargs):
-    """
-    Functional wrapper for critical gaming network calls.
-    """
-    try:
-        return func(*args, **kwargs)
-    except Exception as e:
-        return None
+class StatOverflowError(GamingException):
+    """Raised when a stat exceeds physical bounds."""
+    def __init__(self, stat_name, value):
+        super().__init__(f"Stat {stat_name} value {value} violates game balance constraints")
+
+class EntityDespawnError(GamingException):
+    """Raised when interacting with a non-existent entity."""
+    pass
+
+class NetworkSyncError(GamingException):
+    """Raised when packet order is corrupted."""
+    def __init__(self, packet_id):
+        self.packet_id = packet_id
+        super().__init__(f"State desync detected at packet sequence {packet_id}")
+
+def raise_if_unbalanced(stat_name, value, threshold=999):
+    if value > threshold:
+        raise StatOverflowError(stat_name, value)
+
+class ValidationError(GamingException):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
