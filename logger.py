@@ -1,63 +1,63 @@
 import sys
-import math
-import time
-import json
-from typing import Any, Dict, Optional
+import logging
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
-class ResilientGameLogger:
-    """A gaming log processor with unusual fault tolerance for corrupted telemetry."""
-
-    LEVEL_MAP = {
-        "DEBUG": "\033[94m[HITBOX]\033[0m",
-        "INFO": "\033[92m[QUEST]\033[0m",
-        "WARN": "\033[93m[DEBUFF]\033[0m",
-        "ERROR": "\033[91m[DAMAGE]\033[0m",
-        "CRITICAL": "\033[95m[GAME OVER]\033[0m"
+class GamingLogFormatter(logging.Formatter):
+    """Custom gaming-themed log formatter with level indicators."""
+    LEVEL_BADGES = {
+        logging.DEBUG: "🎮 [DEBUG]",
+        logging.INFO: "⚔️  [INFO ]",
+        logging.WARNING: "⚠️  [WARN ]",
+        logging.ERROR: "💥 [CRIT ]",
+        logging.CRITICAL: "💀 [FATAL]",
     }
 
-    def __init__(self, stream=None, sanitize_nan: bool = True):
-        self.stream = stream or sys.stdout
-        self.sanitize_nan = sanitize_nan
-        self._fallback_stream = sys.stderr
+    def format(self, record):
+        badge = self.LEVEL_BADGES.get(record.levelno, "[LOG]")
+        frame_tick = getattr(record, "tick", 0)
+        timestamp = datetime.fromtimestamp(record.created).strftime("%H:%M:%S.%f")[:-3]
+        record.formatted_prefix = f"{timestamp} | Frame:{frame_tick:06d} | {badge}"
+        return super().format(record)
 
-    def _clean_payload(self, data: Any) -> Any:
-        """Edge case handler for game telemetry (NaN coordinates, unpicklable entities)."""
-        if isinstance(data, float):
-            if math.isnan(data) or math.isinf(data):
-                return "<OUT_OF_BOUNDS>"
-            return round(data, 4)
-        if isinstance(data, (bytes, bytearray)):
-            return data.decode("utf-8", errors="replace")
-        if isinstance(data, dict):
-            return {str(k): self._clean_payload(v) for k, v in data.items()}
-        if isinstance(data, (list, tuple, set)):
-            return [self._clean_payload(x) for x in data]
-        if hasattr(data, "__dict__"):
-            return self._clean_payload(vars(data))
-        return str(data) if not isinstance(data, (int, str, bool, type(None))) else data
+def setup_game_logger(
+    logger_name: str = "game_engine",
+    log_file: str = "game_session.log",
+    max_megabytes: int = 5,
+    backup_count: int = 3,
+    debug_mode: bool = False
+) -> logging.Logger:
+    """Configures a rotating log handler with gaming telemetry tags."""
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.DEBUG if debug_mode else logging.INFO)
+    logger.handlers.clear()
 
-    def log(self, level: str, event_name: str, **metadata: Any) -> str:
-        """Safely formats and emits log entries even under stream failures or bad input."""
-        safe_level = self.LEVEL_MAP.get(str(level).upper(), "[UNKNOWN]")
-        safe_event = str(event_name) if event_name is not None else "UNNAMED_EVENT"
+    max_bytes = max_megabytes * 1024 * 1024
+    file_handler = RotatingFileHandler(
+        filename=log_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8"
+    )
 
-        try:
-            cleaned = self._clean_payload(metadata) if self.sanitize_nan else metadata
-            meta_json = json.dumps(cleaned, default=str)
-        except Exception as e:
-            meta_json = f'{{"_corrupted": true, "_error": "{type(e).__name__}"}}'
+    fmt = "%(formatted_prefix)s :: %(message)s"
+    formatter = GamingLogFormatter(fmt)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
-        timestamp = time.strftime("%H:%M:%S")
-        entry = f"{timestamp} {safe_level} {safe_event} -> {meta_json}\n"
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
-        try:
-            self.stream.write(entry)
-            self.stream.flush()
-        except (IOError, AttributeError, ValueError):
-            try:
-                self._fallback_stream.write(f"[FALLBACK LOG] {entry}")
-                self._fallback_stream.flush()
-            except Exception:
-                pass
+    return logger
 
-        return entry.strip()
+class LogFrameAdapter(logging.LoggerAdapter):
+    """Adapter injecting game tick / frame numbers into log records."""
+    def __init__(self, logger: logging.Logger, current_tick: int = 0):
+        super().__init__(logger, {"tick": current_tick})
+        self.tick = current_tick
+
+    def process(self, msg, kwargs):
+        kwargs["extra"] = kwargs.get("extra", {})
+        kwargs["extra"]["tick"] = self.tick
+        return msg, kwargs
