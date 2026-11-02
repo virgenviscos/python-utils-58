@@ -1,40 +1,45 @@
-import logging
-import random
-from functools import wraps
+import functools
+import time
+import collections
 
-logger = logging.getLogger('python-utils-58')
+CACHE_LIMIT = 128
 
-class GamingError(Exception):
-    """Base exception for unexpected game states."""
-    pass
+class EntityCache:
+    """High-performance entity state retrieval via LRU slotting."""
+    def __init__(self, capacity=CACHE_LIMIT):
+        self._storage = collections.OrderedDict()
+        self.capacity = capacity
 
-def safety_net(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except (ValueError, TypeError, ZeroDivisionError) as e:
-            logger.error(f"Chaos injection triggered: {e}")
-            return None
-        except Exception as e:
-            logger.critical(f"Catastrophic engine failure: {e}")
-            raise GamingError("The game world has collapsed.") from e
-    return wrapper
+    def get_state(self, entity_id, fetch_func):
+        if entity_id in self._storage:
+            self._storage.move_to_end(entity_id)
+            return self._storage[entity_id]
+        
+        state = fetch_func(entity_id)
+        self._storage[entity_id] = state
+        if len(self._storage) > self.capacity:
+            self._storage.popitem(last=False)
+        return state
 
-@safety_net
-def calculate_loot_drop(rarity_score: float, player_luck: float) -> float:
-    if rarity_score <= 0:
-        raise ValueError("Negative rarity is forbidden logic.")
-    rng_fuzz = random.uniform(0.9, 1.1)
-    return (rarity_score * player_luck) / (rng_fuzz * 0.5)
+def frame_throttle(delay_ms):
+    """Execution frequency dampening for game loop events."""
+    def decorator(func):
+        last_called = 0
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            nonlocal last_called
+            now = time.monotonic() * 1000
+            if (now - last_called) >= delay_ms:
+                last_called = now
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
-def sanitize_input(data: str) -> str:
-    try:
-        return str(data).strip().replace(';', '').lower()
-    except Exception:
-        return "default_val"
+def fast_bitmask_check(mask, flag):
+    """Bitwise validation for game state flags."""
+    return (mask & flag) == flag
 
-def sync_world_state(data: dict):
-    if not isinstance(data, dict):
-        raise GamingError("Data packet corruption detected.")
-    return {k: v for k, v in data.items() if v is not None}
+def batch_process_entities(entities, transform_func):
+    """Generator-based memory-efficient entity transformation."""
+    for entity in entities:
+        yield transform_func(entity)
