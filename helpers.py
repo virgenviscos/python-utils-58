@@ -1,45 +1,57 @@
-import functools
+import random
 import time
-import collections
+from functools import wraps
+from typing import Any, Callable, TypeVar
 
-CACHE_LIMIT = 128
+T = TypeVar("T")
 
-class EntityCache:
-    """High-performance entity state retrieval via LRU slotting."""
-    def __init__(self, capacity=CACHE_LIMIT):
-        self._storage = collections.OrderedDict()
-        self.capacity = capacity
 
-    def get_state(self, entity_id, fetch_func):
-        if entity_id in self._storage:
-            self._storage.move_to_end(entity_id)
-            return self._storage[entity_id]
-        
-        state = fetch_func(entity_id)
-        self._storage[entity_id] = state
-        if len(self._storage) > self.capacity:
-            self._storage.popitem(last=False)
-        return state
+class NetworkGlitched(Exception):
+    """Raised when game server connection fails continuously."""
 
-def frame_throttle(delay_ms):
-    """Execution frequency dampening for game loop events."""
-    def decorator(func):
-        last_called = 0
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            nonlocal last_called
-            now = time.monotonic() * 1000
-            if (now - last_called) >= delay_ms:
-                last_called = now
-                return func(*args, **kwargs)
-        return wrapper
-    return decorator
+    pass
 
-def fast_bitmask_check(mask, flag):
-    """Bitwise validation for game state flags."""
-    return (mask & flag) == flag
 
-def batch_process_entities(entities, transform_func):
-    """Generator-based memory-efficient entity transformation."""
-    for entity in entities:
-        yield transform_func(entity)
+class ExtraLivesRetry:
+    """Retry policy modeled as player extra lives with cooldown respawn buffers."""
+
+    def __init__(
+        self,
+        lives: int = 3,
+        cooldown_base: float = 0.5,
+        jitter_range: tuple = (0.1, 0.4),
+        catch_exceptions: tuple = (Exception,),
+    ):
+        self.lives = lives
+        self.cooldown_base = cooldown_base
+        self.jitter_range = jitter_range
+        self.catch_exceptions = catch_exceptions
+
+    def __call__(self, func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def respawn_wrapper(*args: Any, **kwargs: Any) -> T:
+            lives_left = self.lives
+            attempt = 0
+            while lives_left > 0:
+                try:
+                    return func(*args, **kwargs)
+                except self.catch_exceptions as err:
+                    lives_left -= 1
+                    attempt += 1
+                    if lives_left <= 0:
+                        raise NetworkGlitched(
+                            f"Operation '{func.__name__}' game over after {self.lives} retries: {err}"
+                        ) from err
+
+                    cooldown = (self.cooldown_base * (2 ** (attempt - 1))) + random.uniform(
+                        *self.jitter_range
+                    )
+                    time.sleep(cooldown)
+            raise NetworkGlitched("Unexpected failure in respawn loop")
+
+        return respawn_wrapper
+
+
+def net_retry(lives: int = 3, base_delay: float = 0.5):
+    """Convenience decorator for network state synchronization retries."""
+    return ExtraLivesRetry(lives=lives, cooldown_base=base_delay)
