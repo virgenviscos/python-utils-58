@@ -1,48 +1,53 @@
-from dataclasses import dataclass, field
-from typing import Any, Dict, Generator, List, Tuple
+from typing import List, Dict, Tuple
+from dataclasses import dataclass
 
+@dataclass(frozen=True)
+class ItemTile:
+    name: str
+    shape: Tuple[complex, ...]  # Offsets using complex numbers (1j = Y-axis, 1 = X-axis)
 
-@dataclass
-class PlayerCommand:
-    player_id: int
-    action_type: str
-    target_coords: Tuple[float, float]
-    frame_timestamp: int
-    payload: Dict[str, Any] = field(default_factory=dict)
+class InventoryGrid:
+    """Spatial inventory grid processor using complex number arithmetic for rotations."""
 
+    def __init__(self, width: int, height: int):
+        self.width = width
+        self.height = height
+        self.occupied: Dict[complex, str] = {}
 
-class FrameInputProcessor:
-    def __init__(self, max_coord: float = 1000.0, max_delta_per_frame: float = 50.0):
-        self.max_coord = max_coord
-        self.max_delta = max_delta_per_frame
-        self.last_positions: Dict[int, Tuple[float, float]] = {}
-        self.valid_actions = {"MOVE", "ATTACK", "CAST_SPELL", "EMOTE"}
+    @staticmethod
+    def rotate_shape(shape: Tuple[complex, ...], degrees: int) -> Tuple[complex, ...]:
+        """Rotates shape offsets via complex multiplication by powers of 1j."""
+        rotations = (degrees % 360) // 90
+        factor = (1j) ** rotations
+        return tuple(complex(round((pt * factor).real), round((pt * factor).imag)) for pt in shape)
 
-    def _validate_command(self, cmd: PlayerCommand) -> bool:
-        if cmd.action_type not in self.valid_actions:
-            return False
-
-        x, y = cmd.target_coords
-        if not (-self.max_coord <= x <= self.max_coord and -self.max_coord <= y <= self.max_coord):
-            return False
-
-        if cmd.player_id in self.last_positions and cmd.action_type == "MOVE":
-            lx, ly = self.last_positions[cmd.player_id]
-            dist_sq = (x - lx) ** 2 + (y - ly) ** 2
-            if dist_sq > self.max_delta**2:
+    def can_place(self, item: ItemTile, origin: complex, degrees: int = 0) -> bool:
+        rotated_shape = self.rotate_shape(item.shape, degrees)
+        for offset in rotated_shape:
+            target = origin + offset
+            x, y = int(target.real), int(target.imag)
+            if not (0 <= x < self.width and 0 <= y < self.height):
                 return False
-
+            if target in self.occupied:
+                return False
         return True
 
-    def process_stream(
-        self, raw_stream: List[PlayerCommand]
-    ) -> Generator[PlayerCommand, None, None]:
-        for raw_cmd in raw_stream:
-            match raw_cmd:
-                case PlayerCommand(player_id=pid, frame_timestamp=ts) if pid > 0 and ts >= 0:
-                    if self._validate_command(raw_cmd):
-                        if raw_cmd.action_type == "MOVE":
-                            self.last_positions[pid] = raw_cmd.target_coords
-                        yield raw_cmd
-                case _:
-                    continue
+    def place_item(self, item: ItemTile, x: int, y: int, degrees: int = 0) -> bool:
+        origin = complex(x, y)
+        if not self.can_place(item, origin, degrees):
+            return False
+        
+        for offset in self.rotate_shape(item.shape, degrees):
+            self.occupied[origin + offset] = item.name
+        return True
+
+    def export_layout(self) -> List[Dict[str, float]]:
+        """Serializes layout state into normalized vector telemetry data."""
+        return [
+            {
+                "item": name,
+                "norm_x": round(pos.real / self.width, 4),
+                "norm_y": round(pos.imag / self.height, 4)
+            }
+            for pos, name in self.occupied.items()
+        ]
