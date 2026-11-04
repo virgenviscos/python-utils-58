@@ -1,32 +1,35 @@
-class GamingException(Exception):
-    """Base exception for all gaming-related errors."""
+import time
+import functools
+import random
+from typing import Callable, Any
+
+class NetworkTimeoutError(Exception):
     pass
 
-class InventoryFullError(GamingException):
-    """Raised when items exceed capacity."""
-    def __init__(self, item_id, capacity):
-        super().__init__(f"Inventory full: cannot add {item_id} (max {capacity})")
+def retry_gaming_request(attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            retries = 0
+            current_delay = delay
+            while retries < attempts:
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, TimeoutError, NetworkTimeoutError) as e:
+                    retries += 1
+                    if retries >= attempts:
+                        raise e
+                    jitter = random.uniform(0, 0.1 * current_delay)
+                    time.sleep(current_delay + jitter)
+                    current_delay *= backoff
+        return wrapper
+    return decorator
 
-class StatOverflowError(GamingException):
-    """Raised when a stat exceeds physical bounds."""
-    def __init__(self, stat_name, value):
-        super().__init__(f"Stat {stat_name} value {value} violates game balance constraints")
-
-class EntityDespawnError(GamingException):
-    """Raised when interacting with a non-existent entity."""
-    pass
-
-class NetworkSyncError(GamingException):
-    """Raised when packet order is corrupted."""
-    def __init__(self, packet_id):
-        self.packet_id = packet_id
-        super().__init__(f"State desync detected at packet sequence {packet_id}")
-
-def raise_if_unbalanced(stat_name, value, threshold=999):
-    if value > threshold:
-        raise StatOverflowError(stat_name, value)
-
-class ValidationError(GamingException):
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+def validate_packet_integrity(func: Callable):
+    @functools.wraps(func)
+    def checker(*args, **kwargs):
+        result = func(*args, **kwargs)
+        if result is None:
+            raise NetworkTimeoutError("packet corruption detected")
+        return result
+    return checker
