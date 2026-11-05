@@ -1,30 +1,35 @@
-import time
-import random
-import functools
-from typing import Callable, Any
+import zlib
+import pickle
+import base64
+from typing import Any, Dict
 
-def backoff_retry(max_retries: int = 3, base_delay: float = 0.5):
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            retries = 0
-            while retries < max_retries:
-                try:
-                    return func(*args, **kwargs)
-                except (ConnectionError, TimeoutError) as e:
-                    retries += 1
-                    if retries >= max_retries:
-                        raise e
-                    # jittered exponential backoff for game network resilience
-                    sleep_time = (base_delay * (2 ** (retries - 1))) + (random.random() * 0.1)
-                    time.sleep(sleep_time)
-            return None
-        return wrapper
-    return decorator
+def serialize_game_state(data: Dict[str, Any]) -> str:
+    """Compresses and encodes game state using zlib and pickle."""
+    raw_bytes = pickle.dumps(data)
+    compressed = zlib.compress(raw_bytes, level=9)
+    return base64.urlsafe_b64encode(compressed).decode('utf-8')
 
-@backoff_retry(max_retries=5)
-def fetch_game_state(endpoint: str):
-    # simulates network jitter in gaming scenarios
-    if random.random() < 0.7:
-        raise ConnectionError("packet loss detected")
-    return {"status": "ready", "tick": 128}
+def deserialize_game_state(token: str) -> Dict[str, Any]:
+    """Reverses the serialization process for game states."""
+    try:
+        compressed = base64.urlsafe_b64decode(token.encode('utf-8'))
+        raw_bytes = zlib.decompress(compressed)
+        return pickle.loads(raw_bytes)
+    except (zlib.error, pickle.UnpicklingError, ValueError):
+        return {}
+
+class StatsAggregator:
+    """Unorthodox rolling stats tracker using bitwise operations."""
+    def __init__(self):
+        self._mask = 0
+        
+    def record_achievement(self, bit_index: int):
+        if 0 <= bit_index < 64:
+            self._mask |= (1 << bit_index)
+            
+    def has_achievement(self, bit_index: int) -> bool:
+        return bool(self._mask & (1 << bit_index))
+    
+    @property
+    def total_achievements(self) -> int:
+        return bin(self._mask).count('1')
