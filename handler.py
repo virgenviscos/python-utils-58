@@ -1,45 +1,46 @@
-import math
-from typing import Dict, Any, Generator, Callable, List
+import functools
+import collections
 
-class InvalidGameInputError(Exception):
-    """Raised when a player input packet violates bounds or schema."""
-    pass
+class EntityCache:
+    """High-speed entity lookup using double-decker LRU architecture."""
+    def __init__(self, capacity=1024):
+        self.capacity = capacity
+        self.hot_cache = {}
+        self.cold_cache = collections.OrderedDict()
 
-def validate_spatial_bounds(data: Dict[str, Any]) -> bool:
-    x, y, z = data.get("pos", (0.0, 0.0, 0.0))
-    return all(-10000 <= axis <= 10000 for axis in (x, y, z)) and not any(math.isnan(axis) for axis in (x, y, z))
+    def get_entity(self, entity_id, fetch_func):
+        if entity_id in self.hot_cache:
+            return self.hot_cache[entity_id]
+        
+        if entity_id in self.cold_cache:
+            val = self.cold_cache.pop(entity_id)
+            self._promote(entity_id, val)
+            return val
 
-def validate_action_cooldown(data: Dict[str, Any]) -> bool:
-    action = data.get("action")
-    timestamp = data.get("ts", 0)
-    return isinstance(action, (str, type(None))) and isinstance(timestamp, (int, float)) and timestamp >= 0
+        val = fetch_func(entity_id)
+        self._promote(entity_id, val)
+        return val
 
-class FrameInputProcessor:
+    def _promote(self, key, value):
+        self.hot_cache[key] = value
+        if len(self.hot_cache) > self.capacity:
+            k, v = self.hot_cache.popitem()
+            self.cold_cache[k] = v
+
+@functools.lru_cache(maxsize=128)
+def calculate_collision_vector(pos_a, pos_b):
+    """Vectorized-style spatial calculation optimization."""
+    dx, dy = pos_a[0] - pos_b[0], pos_a[1] - pos_b[1]
+    return (dx**2 + dy**2)**0.5
+
+def batch_process_entities(entities, transform_func):
+    """Generator-based pipeline for memory efficiency."""
+    for entity in entities:
+        yield transform_func(entity)
+
+class StateProcessor:
     def __init__(self):
-        self._rules: List[Callable[[Dict[str, Any]], bool]] = [
-            validate_spatial_bounds,
-            validate_action_cooldown
-        ]
-
-    def sanitize_stream(self, raw_frames: List[Dict[str, Any]]) -> Generator[Dict[str, Any], None, None]:
-        """Main processing loop with pipeline-style input validation."""
-        for frame_id, frame in enumerate(raw_frames):
-            if not isinstance(frame, dict):
-                continue
-
-            validation_matrix = (rule(frame) for rule in self._rules)
-            if not all(validation_matrix):
-                frame["corrupted"] = True
-                frame["pos"] = (0.0, 0.0, 0.0)
-                frame["action"] = "idle"
-            else:
-                frame["corrupted"] = False
-
-            if "pos" in frame and not frame["corrupted"]:
-                frame["pos"] = tuple(round(float(v), 3) for v in frame["pos"])
-
-            yield {"frame_id": frame_id, **frame}
-
-def process_game_inputs(raw_stream: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    processor = FrameInputProcessor()
-    return [frame for frame in processor.sanitize_stream(raw_stream) if not frame.get("corrupted")]
+        self.registry = EntityCache()
+    
+    def update(self, entity_id, data):
+        return self.registry.get_entity(entity_id, lambda x: data)
