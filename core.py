@@ -1,46 +1,29 @@
-import array
-import math
-from typing import Dict, Generator
+from typing import Dict, List, Union, Callable
 
-class SpatialHashGrid:
-    """Bitwise spatial hashing grid using typed arrays for fast game entity queries."""
-    __slots__ = ('cell_size', 'shift', 'grid', 'mask')
+class GameState:
+    """Manages state transitions using a function map approach."""
+    def __init__(self) -> None:
+        self._states: Dict[str, Callable[[], None]] = {}
 
-    def __init__(self, cell_size: int = 64, grid_bits: int = 10) -> None:
-        self.cell_size = cell_size
-        self.shift = int(math.log2(cell_size)) if cell_size > 0 else 6
-        self.mask = (1 << grid_bits) - 1
-        self.grid: Dict[int, array.array] = {}
+    def register(self, name: str, callback: Callable[[], None]) -> None:
+        """Adds a new state hook to the registry."""
+        self._states[name] = callback
 
-    def _hash(self, x: float, y: float) -> int:
-        cx = int(x) >> self.shift
-        cy = int(y) >> self.shift
-        return ((cx & self.mask) << 10) | (cy & self.mask)
+    def trigger(self, name: str) -> None:
+        """Executes a state callback by key."""
+        if name in self._states:
+            self._states[name]()
 
-    def insert(self, entity_id: int, x: float, y: float) -> None:
-        key = self._hash(x, y)
-        bucket = self.grid.get(key)
-        if bucket is None:
-            bucket = array.array('I')
-            self.grid[key] = bucket
-        bucket.append(entity_id)
+def calculate_dps(base_dmg: float, crit_mult: float, proc_rate: float) -> float:
+    """Calculates theoretical damage per second with crit integration."""
+    return base_dmg * (1.0 + (crit_mult * proc_rate))
 
-    def clear(self) -> None:
-        self.grid.clear()
+def spawn_entities(count: int, entity_type: str = "goblin") -> List[str]:
+    """Generates a list of game entities."""
+    return [f"{entity_type}_{i:03d}" for i in range(count)]
 
-    def query_radius(self, x: float, y: float, radius: float) -> Generator[int, None, None]:
-        min_cx = int(x - radius) >> self.shift
-        max_cx = int(x + radius) >> self.shift
-        min_cy = int(y - radius) >> self.shift
-        max_cy = int(y + radius) >> self.shift
-
-        for cx in range(min_cx, max_cx + 1):
-            for cy in range(min_cy, max_cy + 1):
-                key = ((cx & self.mask) << 10) | (cy & self.mask)
-                bucket = self.grid.get(key)
-                if bucket:
-                    for eid in bucket:
-                        yield eid
-
-    def get_cell_stats(self) -> Dict[int, int]:
-        return {key: len(buf) for key, buf in self.grid.items()}
+if __name__ == "__main__":
+    # Example usage for demonstration
+    engine = GameState()
+    engine.register("idle", lambda: print("System waiting..."))
+    engine.trigger("idle")
