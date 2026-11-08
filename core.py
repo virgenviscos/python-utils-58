@@ -1,29 +1,52 @@
-from typing import Dict, List, Union, Callable
+import functools
+import time
+from typing import Callable, Any
 
-class GameState:
-    """Manages state transitions using a function map approach."""
-    def __init__(self) -> None:
-        self._states: Dict[str, Callable[[], None]] = {}
+class GameStateRegistry:
+    def __init__(self):
+        self._data = {}
+        self._hooks = []
 
-    def register(self, name: str, callback: Callable[[], None]) -> None:
-        """Adds a new state hook to the registry."""
-        self._states[name] = callback
+    def __setitem__(self, key: str, value: Any):
+        self._data[key] = value
+        for hook in self._hooks:
+            hook(key, value)
 
-    def trigger(self, name: str) -> None:
-        """Executes a state callback by key."""
-        if name in self._states:
-            self._states[name]()
+    def __getitem__(self, key: str) -> Any:
+        return self._data.get(key)
 
-def calculate_dps(base_dmg: float, crit_mult: float, proc_rate: float) -> float:
-    """Calculates theoretical damage per second with crit integration."""
-    return base_dmg * (1.0 + (crit_mult * proc_rate))
+    def attach(self, callback: Callable[[str, Any], None]):
+        self._hooks.append(callback)
 
-def spawn_entities(count: int, entity_type: str = "goblin") -> List[str]:
-    """Generates a list of game entities."""
-    return [f"{entity_type}_{i:03d}" for i in range(count)]
+def throttle(interval: float):
+    def decorator(func):
+        last_called = 0.0
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            nonlocal last_called
+            elapsed = time.time() - last_called
+            if elapsed >= interval:
+                last_called = time.time()
+                return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
-if __name__ == "__main__":
-    # Example usage for demonstration
-    engine = GameState()
-    engine.register("idle", lambda: print("System waiting..."))
-    engine.trigger("idle")
+class EngineCore:
+    def __init__(self):
+        self.registry = GameStateRegistry()
+        self.running = True
+
+    @throttle(0.016)
+    def tick(self, frame_id: int):
+        if self.running:
+            self.registry['frame'] = frame_id
+
+    def shutdown(self):
+        self.running = False
+        print("System state synchronized and finalized")
+
+if __name__ == '__main__':
+    engine = EngineCore()
+    engine.registry.attach(lambda k, v: print(f"State Update: {k}={v}"))
+    for i in range(5):
+        engine.tick(i)
