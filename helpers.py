@@ -1,57 +1,62 @@
+import math
 import random
-import time
-from functools import wraps
-from typing import Any, Callable, TypeVar
-
-T = TypeVar("T")
+from enum import IntFlag
+from typing import Dict, Tuple, List, Optional
 
 
-class NetworkGlitched(Exception):
-    """Raised when game server connection fails continuously."""
-
-    pass
-
-
-class ExtraLivesRetry:
-    """Retry policy modeled as player extra lives with cooldown respawn buffers."""
-
-    def __init__(
-        self,
-        lives: int = 3,
-        cooldown_base: float = 0.5,
-        jitter_range: tuple = (0.1, 0.4),
-        catch_exceptions: tuple = (Exception,),
-    ):
-        self.lives = lives
-        self.cooldown_base = cooldown_base
-        self.jitter_range = jitter_range
-        self.catch_exceptions = catch_exceptions
-
-    def __call__(self, func: Callable[..., T]) -> Callable[..., T]:
-        @wraps(func)
-        def respawn_wrapper(*args: Any, **kwargs: Any) -> T:
-            lives_left = self.lives
-            attempt = 0
-            while lives_left > 0:
-                try:
-                    return func(*args, **kwargs)
-                except self.catch_exceptions as err:
-                    lives_left -= 1
-                    attempt += 1
-                    if lives_left <= 0:
-                        raise NetworkGlitched(
-                            f"Operation '{func.__name__}' game over after {self.lives} retries: {err}"
-                        ) from err
-
-                    cooldown = (self.cooldown_base * (2 ** (attempt - 1))) + random.uniform(
-                        *self.jitter_range
-                    )
-                    time.sleep(cooldown)
-            raise NetworkGlitched("Unexpected failure in respawn loop")
-
-        return respawn_wrapper
+class StatusFlags(IntFlag):
+    NONE = 0
+    POISONED = 1 << 0
+    STUNNED = 1 << 1
+    FROZEN = 1 << 2
+    BURNING = 1 << 3
+    BLEEDING = 1 << 4
+    INVULNERABLE = 1 << 5
 
 
-def net_retry(lives: int = 3, base_delay: float = 0.5):
-    """Convenience decorator for network state synchronization retries."""
-    return ExtraLivesRetry(lives=lives, cooldown_base=base_delay)
+def calculate_level_progression(xp: int, base: float = 100.0, growth: float = 1.25) -> Tuple[int, int]:
+    """Calculates current level and remaining experience points required for the next level."""
+    if xp <= 0:
+        return 1, int(base)
+    level = int(math.floor(math.log((xp / base) * (growth - 1) + 1, growth))) + 1
+    xp_next_level = int(base * (math.pow(growth, level) - 1) / (growth - 1))
+    return level, max(0, xp_next_level - xp)
+
+
+def calculate_hex_distance(start: Tuple[int, int, int], end: Tuple[int, int, int]) -> int:
+    """Calculates Manhattan distance between two tiles using 3D cube coordinates (x, y, z)."""
+    return max(abs(start[0] - end[0]), abs(start[1] - end[1]), abs(start[2] - end[2]))
+
+
+class PityLootTable:
+    """Loot rolling utility with cumulative pity probability scaling for rare items."""
+
+    def __init__(self, items: Dict[str, float], rare_keys: Optional[List[str]] = None):
+        self.items = items
+        self.rare_keys = set(rare_keys or [k for k in items if "epic" in k.lower() or "rare" in k.lower()])
+        self.miss_counter = 0
+
+    def roll(self, pity_step: float = 0.02) -> str:
+        bonus = self.miss_counter * pity_step
+        weights = []
+        keys = list(self.items.keys())
+        for key in keys:
+            weight = self.items[key]
+            if key in self.rare_keys:
+                weight += bonus
+            weights.append(max(0.0, weight))
+
+        chosen = random.choices(keys, weights=weights, k=1)[0]
+        if chosen in self.rare_keys:
+            self.miss_counter = 0
+        else:
+            self.miss_counter += 1
+        return chosen
+
+
+def apply_status_modifier(current: StatusFlags, add: StatusFlags = StatusFlags.NONE, remove: StatusFlags = StatusFlags.NONE) -> StatusFlags:
+    """Applies status flags while filtering invulnerability rules."""
+    updated = (current | add) & ~remove
+    if updated & StatusFlags.INVULNERABLE:
+        updated &= ~(StatusFlags.POISONED | StatusFlags.BLEEDING | StatusFlags.BURNING)
+    return updated
