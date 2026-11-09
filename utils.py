@@ -1,35 +1,33 @@
 import zlib
-import pickle
 import base64
+import json
 from typing import Any, Dict
 
-def serialize_game_state(data: Dict[str, Any]) -> str:
-    """Compresses and encodes game state using zlib and pickle."""
-    raw_bytes = pickle.dumps(data)
-    compressed = zlib.compress(raw_bytes, level=9)
+def pack_game_state(state_dict: Dict[str, Any]) -> str:
+    """Compresses game state into a compact web-safe string."""
+    json_data = json.dumps(state_dict, separators=(',', ':'))
+    compressed = zlib.compress(json_data.encode('utf-8'), level=9)
     return base64.urlsafe_b64encode(compressed).decode('utf-8')
 
-def deserialize_game_state(token: str) -> Dict[str, Any]:
-    """Reverses the serialization process for game states."""
-    try:
-        compressed = base64.urlsafe_b64decode(token.encode('utf-8'))
-        raw_bytes = zlib.decompress(compressed)
-        return pickle.loads(raw_bytes)
-    except (zlib.error, pickle.UnpicklingError, ValueError):
-        return {}
+def unpack_game_state(payload: str) -> Dict[str, Any]:
+    """Inflates compact game state back into python dictionary."""
+    raw = base64.urlsafe_b64decode(payload)
+    decompressed = zlib.decompress(raw)
+    return json.loads(decompressed.decode('utf-8'))
 
-class StatsAggregator:
-    """Unorthodox rolling stats tracker using bitwise operations."""
-    def __init__(self):
-        self._mask = 0
-        
-    def record_achievement(self, bit_index: int):
-        if 0 <= bit_index < 64:
-            self._mask |= (1 << bit_index)
-            
-    def has_achievement(self, bit_index: int) -> bool:
-        return bool(self._mask & (1 << bit_index))
-    
-    @property
-    def total_achievements(self) -> int:
-        return bin(self._mask).count('1')
+class DataEnvelope:
+    def __init__(self, raw_data: Any):
+        self.payload = raw_data
+        self.version = 58
+
+    def serialize(self) -> str:
+        return pack_game_state({
+            'v': self.version,
+            'data': self.payload
+        })
+
+if __name__ == '__main__':
+    envelope = DataEnvelope({'player': 'hero', 'hp': 100, 'items': ['sword', 'shield']})
+    blob = envelope.serialize()
+    print(f'Compressed state: {blob}')
+    print(f'Decoded: {unpack_game_state(blob)}')
