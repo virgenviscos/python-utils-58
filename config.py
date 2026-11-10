@@ -1,36 +1,34 @@
-import json
 import os
-from typing import Any, Dict
+from typing import Dict, Any
 
 class GameConfig:
-    """Dynamic configuration loader with fallback defaults."""
-    def __init__(self, file_path: str, defaults: Dict[str, Any]):
-        self.file_path = file_path
-        self.settings = defaults
-        self._load()
+    """Dynamic registry for game parameters using a dictionary-based access pattern."""
+    def __init__(self, defaults: Dict[str, Any] = None):
+        self._storage = defaults or {
+            "tick_rate": 60,
+            "render_mode": "vulkan",
+            "debug_level": 0,
+            "assets_path": "./assets"
+        }
 
-    def _load(self) -> None:
-        if os.path.exists(self.file_path):
-            with open(self.file_path, 'r') as f:
-                try:
-                    user_data = json.load(f)
-                    self.settings.update(user_data)
-                except json.JSONDecodeError:
-                    pass
-
-    def __getattr__(self, name: str) -> Any:
-        return self.settings.get(name)
+    def __getitem__(self, key: str) -> Any:
+        return self._storage.get(key)
 
     def __setitem__(self, key: str, value: Any) -> None:
-        self.settings[key] = value
-        with open(self.file_path, 'w') as f:
-            json.dump(self.settings, f, indent=4)
+        self._storage[key] = value
 
-    def reset(self) -> None:
-        if os.path.exists(self.file_path):
-            os.remove(self.file_path)
+    def load_environment(self) -> None:
+        """Inject env variables into config mapping."""
+        for key in self._storage.keys():
+            env_val = os.getenv(f"GAME_{key.upper()}")
+            if env_val:
+                try:
+                    self._storage[key] = int(env_val)
+                except ValueError:
+                    self._storage[key] = env_val
 
-# Example Usage:
-# cfg = GameConfig('settings.json', {'volume': 80, 'fullscreen': True})
-# print(cfg.volume)
-# cfg['volume'] = 90
+    def reset_to_defaults(self) -> None:
+        self._storage.update({"tick_rate": 60, "render_mode": "vulkan"})
+
+settings = GameConfig()
+settings.load_environment()
