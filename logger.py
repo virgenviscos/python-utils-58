@@ -1,69 +1,59 @@
-import time
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
 
-class TelemetryFilter(logging.Filter):
-    """Attaches game session uptime info to log records."""
+class GameTickFormatter(logging.Formatter):
+    """Formatter that injects frame/tick timing into log outputs."""
 
-    def __init__(self, session_id: str):
-        super().__init__()
-        self.session_id = session_id
-        self.start_time = time.time()
+    def __init__(self, fmt: Optional[str] = None, datefmt: Optional[str] = None):
+        super().__init__(
+            fmt or "[%(asctime)s][%(levelname)s][TICK:%(tick)d] %(message)s",
+            datefmt,
+        )
+        self._start_time = time.time()
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        record.uptime = f"{time.time() - self.start_time:.2f}s"
-        record.session_id = self.session_id
-        return True
+    def format(self, record: logging.LogRecord) -> str:
+        if not hasattr(record, "tick"):
+            # Estimate tick index assuming standard 60 FPS update cycle
+            elapsed = time.time() - self._start_time
+            record.tick = int(elapsed * 60)
+        return super().format(record)
 
 
-class GameSessionLogRotator(RotatingFileHandler):
-    """Rotating log handler that stamps a session header upon rollover."""
+class SessionRotatingHandler(RotatingFileHandler):
+    """Rotates log files and writes session boundary markers upon rotation."""
 
-    def doRollover(self):
+    def doRollover(self) -> None:
         super().doRollover()
         if self.stream:
-            self.stream.write("=== SESSION ROTATION MARKER ===\n")
+            self.stream.write("=== LOG ROTATION: NEW SESSION SEGMENT ===\n")
             self.stream.flush()
 
 
 def setup_game_logger(
-    logger_name: str = "game_telemetry",
-    log_file: str = "game_events.log",
-    max_bytes: int = 1_048_576,
-    backup_count: int = 5,
-    session_id: Optional[str] = None,
+    name: str = "game_engine",
+    log_file: str = "game_session.log",
+    max_bytes: int = 524_288,  # 512 KB
+    backup_count: int = 3,
+    level: int = logging.INFO,
 ) -> logging.Logger:
-    """Configures a rotating logger with telemetry metadata for game events."""
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
+    """Configures and returns a tick-aware rotating logger for game engine diagnostics."""
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.propagate = False
 
     if logger.handlers:
         return logger
 
-    sess_id = session_id or f"sess_{int(time.time())}"
-    logger.addFilter(TelemetryFilter(session_id=sess_id))
-
-    formatter = logging.Formatter(
-        fmt="[%(asctime)s][%(session_id)s][T+%(uptime)s][%(levelname)s] >> %(message)s",
-        datefmt="%H:%M:%S",
-    )
-
-    file_handler = GameSessionLogRotator(
+    handler = SessionRotatingHandler(
         filename=log_file,
         maxBytes=max_bytes,
         backupCount=backup_count,
         encoding="utf-8",
     )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    handler.setFormatter(GameTickFormatter())
+    logger.addHandler(handler)
 
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    logger.info(f"Telemetry logger initialized for session {sess_id}")
     return logger
