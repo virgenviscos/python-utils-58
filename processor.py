@@ -1,48 +1,31 @@
 import functools
-from dataclasses import dataclass
-from typing import Callable, Any
+from typing import Any, Callable, Dict
 
-@dataclass
-class GameState:
-    score: int = 0
-    entities: list = None
+class GameStateProcessor:
+    def __init__(self, state: Dict[str, Any]):
+        self._state = state
+        self._hooks = []
 
-    def __post_init__(self):
-        self.entities = self.entities or []
+    def register_hook(self, func: Callable[[Dict], Dict]) -> None:
+        self._hooks.append(func)
 
-def stage_cleanup(func: Callable):
-    @functools.wraps(func)
-    def wrapper(state: GameState, *args, **kwargs):
-        state.entities = [e for e in state.entities if getattr(e, 'alive', True)]
-        return func(state, *args, **kwargs)
-    return wrapper
+    def process_frame(self) -> Dict[str, Any]:
+        return functools.reduce(
+            lambda s, hook: hook(s),
+            self._hooks,
+            self._state
+        )
 
-class EntityProcessor:
-    def __init__(self, multiplier: float = 1.0):
-        self.multiplier = multiplier
+def health_clamp(state: Dict[str, Any]) -> Dict[str, Any]:
+    state['health'] = max(0, min(100, state.get('health', 0)))
+    return state
 
-    @stage_cleanup
-    def process_tick(self, state: GameState, points: int):
-        state.score += int(points * self.multiplier)
-        for entity in state.entities:
-            if hasattr(entity, 'update'):
-                entity.update()
-        return state.score
+def xp_multiplier(state: Dict[str, Any]) -> Dict[str, Any]:
+    state['xp'] = int(state.get('xp', 0) * 1.05)
+    return state
 
-class Entity:
-    def __init__(self, name: str, alive: bool = True):
-        self.name = name
-        self.alive = alive
-
-    def update(self):
-        pass
-
-def bootstrap_processing(entities: list) -> GameState:
-    return GameState(entities=entities)
-
-if __name__ == '__main__':
-    proc = EntityProcessor(multiplier=1.5)
-    gs = bootstrap_processing([Entity('npc_1'), Entity('npc_2', False)])
-    print(f'Initial count: {len(gs.entities)}')
-    proc.process_tick(gs, 100)
-    print(f'Final count: {len(gs.entities)}')
+def run_pipeline(initial_data: Dict[str, Any]) -> Dict[str, Any]:
+    processor = GameStateProcessor(initial_data)
+    processor.register_hook(health_clamp)
+    processor.register_hook(xp_multiplier)
+    return processor.process_frame()
