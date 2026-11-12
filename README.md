@@ -1,51 +1,52 @@
 # python-utils-58
 
-A collection of high-performance Python utilities designed to streamline game development tasks and asset processing. This library provides optimized tools for handling game data, networking, and spatial calculations in Python-based engines.
+A collection of lightweight Python utilities designed to streamline game development tasks and asset processing. This toolkit focuses on simplifying data serialization, memory-efficient logging, and performance-critical mathematical operations for indie game projects.
 
-## Features
+### Features
+*   **Asset Packager:** Recursively pack sprite sheets and audio assets into optimized binary blobs to reduce game load times.
+*   **Vector Math Suite:** A high-performance set of 2D/3D coordinate manipulation tools optimized for collision detection and trajectory calculation.
+*   **Config Hot-Reloader:** Automatically syncs JSON or YAML configuration changes to the game engine state without requiring a full restart.
+*   **Event Dispatcher:** A decoupled pub/sub system to manage complex UI and game state interactions with minimal overhead.
 
-*   **Fast Sprite Packer:** Automate texture atlas generation using efficient packing algorithms to minimize memory footprint.
-*   **Packet Serializer:** Lightweight binary serialization for real-time multiplayer networking, optimized for low-latency UDP communication.
-*   **Spatial Grid Manager:** Rapid 2D/3D collision broad-phase filtering using a dynamic spatial hashing grid.
-*   **Save-Data Validator:** Robust schema enforcement for JSON/Binary game save files with automatic version migration support.
+### Installation
 
-## Installation
-
-Install the package via pip:
+Requires Python 3.8 or higher. Install directly via pip:
 
 ```bash
 pip install python-utils-58
 ```
 
-To install from source for local development:
+Alternatively, clone the repository for development:
 
 ```bash
-git clone https://github.com/Developer/python-utils-58.git
+git clone https://github.com/developer/python-utils-58.git
 cd python-utils-58
-pip install -e .
+pip install -r requirements.txt
 ```
 
-## Usage
+### Usage
 
-Easily manage entity collision checks using the `SpatialGrid` utility:
+Easily integrate the event dispatcher into your game loop to manage character states or input triggers:
 
 ```python
-from utils_58.spatial import SpatialGrid
+from utils_58 import EventDispatcher
 
-# Initialize a grid with 64px cell size
-grid = SpatialGrid(cell_size=64)
+# Initialize the dispatcher
+bus = EventDispatcher()
 
-# Register game entities
-grid.insert(entity_id=1, bounds=(10, 10, 32, 32))
-grid.insert(entity_id=2, bounds=(50, 50, 32, 32))
+# Define a callback for player interaction
+def on_player_jump(data):
+    print(f"Player jumped with intensity: {data['force']}")
 
-# Query nearby entities
-neighbors = grid.get_nearby(x=20, y=20, radius=50)
-print(f"Entities found in range: {neighbors}")
+# Subscribe to the event
+bus.subscribe("player_action", on_player_jump)
+
+# Trigger the event elsewhere in your engine
+bus.emit("player_action", {"force": 10})
 ```
 
-## License
+### License
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 Distributed under the MIT License. See `LICENSE` for more information.
