@@ -1,36 +1,45 @@
-import zlib
-import pickle
-import base64
-from typing import Any, Dict
+import functools
+import time
 
-class GameStateSerializer:
-    def __init__(self, secret_salt: str = 'G4M3R_PR0'):
-        self.salt = secret_salt.encode()
+class EntityCache:
+    def __init__(self, capacity=1024):
+        self.capacity = capacity
+        self.data = {}
+        self.order = []
 
-    def pack(self, data: Dict[str, Any]) -> str:
-        raw = pickle.dumps(data)
-        compressed = zlib.compress(raw + self.salt, level=9)
-        return base64.urlsafe_b64encode(compressed).decode('utf-8')
+    def get(self, key):
+        if key in self.data:
+            self.order.remove(key)
+            self.order.append(key)
+            return self.data[key]
+        return None
 
-    def unpack(self, payload: str) -> Dict[str, Any]:
-        try:
-            raw = base64.urlsafe_b64decode(payload)
-            decompressed = zlib.decompress(raw)
-            if not decompressed.endswith(self.salt):
-                raise ValueError('tampered save file detected')
-            return pickle.loads(decompressed[:-len(self.salt)])
-        except (zlib.error, pickle.UnpicklingError, ValueError) as e:
-            return {'error': 'corrupted_state', 'details': str(e)}
+    def set(self, key, value):
+        if key in self.data:
+            self.order.remove(key)
+        elif len(self.data) >= self.capacity:
+            oldest = self.order.pop(0)
+            del self.data[oldest]
+        self.data[key] = value
+        self.order.append(key)
 
-def extract_player_stats(payload: str) -> Dict[str, Any]:
-    handler = GameStateSerializer()
-    state = handler.unpack(payload)
-    stats = state.get('stats', {})
-    return {k: v for k, v in stats.items() if isinstance(v, (int, float))}
+def fast_lookup(func):
+    cache = EntityCache()
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        key = str(args) + str(kwargs)
+        result = cache.get(key)
+        if result is None:
+            result = func(*args, **kwargs)
+            cache.set(key, result)
+        return result
+    return wrapper
 
-if __name__ == '__main__':
-    packer = GameStateSerializer()
-    test_data = {'stats': {'hp': 100, 'xp': 550, 'mana': 80}, 'pos': (10, 20)}
-    encoded = packer.pack(test_data)
-    print(f'serialized state length: {len(encoded)}')
-    print(f'extracted stats: {extract_player_stats(encoded)}')
+@fast_lookup
+def compute_frame_logic(entity_id, delta):
+    time.sleep(0.01)
+    return f"processed_{entity_id}_{delta}"
+
+class StateHandler:
+    def update(self, entity_ids, delta):
+        return [compute_frame_logic(eid, delta) for eid in entity_ids]
