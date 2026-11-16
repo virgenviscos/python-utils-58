@@ -1,59 +1,42 @@
 import logging
-import time
 from logging.handlers import RotatingFileHandler
-from typing import Optional
+import os
 
-
-class GameTickFormatter(logging.Formatter):
-    """Formatter that injects frame/tick timing into log outputs."""
-
-    def __init__(self, fmt: Optional[str] = None, datefmt: Optional[str] = None):
-        super().__init__(
-            fmt or "[%(asctime)s][%(levelname)s][TICK:%(tick)d] %(message)s",
-            datefmt,
-        )
-        self._start_time = time.time()
-
-    def format(self, record: logging.LogRecord) -> str:
-        if not hasattr(record, "tick"):
-            # Estimate tick index assuming standard 60 FPS update cycle
-            elapsed = time.time() - self._start_time
-            record.tick = int(elapsed * 60)
-        return super().format(record)
-
-
-class SessionRotatingHandler(RotatingFileHandler):
-    """Rotates log files and writes session boundary markers upon rotation."""
-
-    def doRollover(self) -> None:
-        super().doRollover()
-        if self.stream:
-            self.stream.write("=== LOG ROTATION: NEW SESSION SEGMENT ===\n")
-            self.stream.flush()
-
-
-def setup_game_logger(
-    name: str = "game_engine",
-    log_file: str = "game_session.log",
-    max_bytes: int = 524_288,  # 512 KB
-    backup_count: int = 3,
-    level: int = logging.INFO,
-) -> logging.Logger:
-    """Configures and returns a tick-aware rotating logger for game engine diagnostics."""
+def setup_game_logger(name='gaming_engine', log_file='engine.log'):
+    """
+    Orchestrates the logging flow for the gaming framework.
+    Wraps the standard library with a twist for high-frequency writes.
+    """
     logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.propagate = False
+    logger.setLevel(logging.DEBUG)
 
-    if logger.handlers:
-        return logger
+    # Ensuring the path exists, because games have messy folders
+    log_dir = os.path.dirname(log_file)
+    if log_dir and not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
-    handler = SessionRotatingHandler(
-        filename=log_file,
-        maxBytes=max_bytes,
-        backupCount=backup_count,
-        encoding="utf-8",
+    # Rotating handler: 5MB per file, keep 3 backups
+    handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=5*1024*1024, 
+        backupCount=3
     )
-    handler.setFormatter(GameTickFormatter())
+    
+    # Custom formatter for gaming context
+    formatter = logging.Formatter(
+        '[%(asctime)s][%(levelname)s][TICK:%(process)d] %(message)s',
+        datefmt='%H:%M:%S'
+    )
+    
+    handler.setFormatter(formatter)
     logger.addHandler(handler)
-
+    
+    # Stream output for console debugging
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    logger.addHandler(console)
+    
     return logger
+
+# Initialize with global scope for engine use
+game_log = setup_game_logger()
