@@ -1,31 +1,34 @@
-import functools
-from typing import Any, Callable, Dict
+import logging
+from typing import Any, Dict
 
-class GameStateProcessor:
-    def __init__(self, state: Dict[str, Any]):
-        self._state = state
-        self._hooks = []
+logger = logging.getLogger(__name__)
 
-    def register_hook(self, func: Callable[[Dict], Dict]) -> None:
-        self._hooks.append(func)
+class InputProcessor:
+    def __init__(self, schema: Dict[str, type]):
+        self.schema = schema
 
-    def process_frame(self) -> Dict[str, Any]:
-        return functools.reduce(
-            lambda s, hook: hook(s),
-            self._hooks,
-            self._state
-        )
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        try:
+            for key, expected_type in self.schema.items():
+                if key not in data or not isinstance(data[key], expected_type):
+                    raise ValueError(f"missing or invalid type for {key}")
+            return True
+        except ValueError as e:
+            logger.warning(f"malformed packet dropped: {e}")
+            return False
 
-def health_clamp(state: Dict[str, Any]) -> Dict[str, Any]:
-    state['health'] = max(0, min(100, state.get('health', 0)))
-    return state
+    def process_loop(self, queue: list):
+        """Main gaming loop processing frame inputs."""
+        while queue:
+            packet = queue.pop(0)
+            if self.validate_input(packet):
+                self.execute_game_logic(packet)
 
-def xp_multiplier(state: Dict[str, Any]) -> Dict[str, Any]:
-    state['xp'] = int(state.get('xp', 0) * 1.05)
-    return state
+    def execute_game_logic(self, packet: Dict[str, Any]):
+        # Game state mutation magic
+        pass
 
-def run_pipeline(initial_data: Dict[str, Any]) -> Dict[str, Any]:
-    processor = GameStateProcessor(initial_data)
-    processor.register_hook(health_clamp)
-    processor.register_hook(xp_multiplier)
-    return processor.process_frame()
+if __name__ == "__main__":
+    # Example usage for a movement packet
+    proc = InputProcessor({"x": int, "y": int, "id": str})
+    proc.process_loop([{"x": 10, "y": 20, "id": "player_1"}])
