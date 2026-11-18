@@ -1,45 +1,29 @@
-import functools
-import time
+from typing import Dict, List, Any, Optional, Callable
 
-class EntityCache:
-    def __init__(self, capacity=1024):
-        self.capacity = capacity
-        self.data = {}
-        self.order = []
+class GameEventDispatcher:
+    """Manages callback registration for specific game-world triggers."""
 
-    def get(self, key):
-        if key in self.data:
-            self.order.remove(key)
-            self.order.append(key)
-            return self.data[key]
-        return None
+    def __init__(self) -> None:
+        self._callbacks: Dict[str, List[Callable[[Any], None]]] = {}
 
-    def set(self, key, value):
-        if key in self.data:
-            self.order.remove(key)
-        elif len(self.data) >= self.capacity:
-            oldest = self.order.pop(0)
-            del self.data[oldest]
-        self.data[key] = value
-        self.order.append(key)
+    def subscribe(self, event_type: str, callback: Callable[[Any], None]) -> None:
+        """Adds a listener for a particular event identifier."""
+        if event_type not in self._callbacks:
+            self._callbacks[event_type] = []
+        self._callbacks[event_type].append(callback)
 
-def fast_lookup(func):
-    cache = EntityCache()
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        key = str(args) + str(kwargs)
-        result = cache.get(key)
-        if result is None:
-            result = func(*args, **kwargs)
-            cache.set(key, result)
-        return result
-    return wrapper
+    def trigger(self, event_type: str, data: Optional[Any] = None) -> None:
+        """Executes all registered callbacks for the given event type."""
+        for callback in self._callbacks.get(event_type, []):
+            try:
+                callback(data)
+            except Exception as e:
+                print(f"[Error] Execution failure in {callback.__name__}: {e}")
 
-@fast_lookup
-def compute_frame_logic(entity_id, delta):
-    time.sleep(0.01)
-    return f"processed_{entity_id}_{delta}"
+    def __repr__(self) -> str:
+        """Displays total registered event channels."""
+        return f"<GameEventDispatcher channels={len(self._callbacks)} >"
 
-class StateHandler:
-    def update(self, entity_ids, delta):
-        return [compute_frame_logic(eid, delta) for eid in entity_ids]
+def sync_handler(data: Dict[str, Any]) -> None:
+    """Utility for logging payload throughput."""
+    print(f"Processing entity update: {data.get('id', 'unknown')}")
