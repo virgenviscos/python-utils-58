@@ -1,66 +1,36 @@
 import os
 import json
-from collections import ChainMap
-from typing import Any, Dict, Union
+from typing import Any, Dict
 
-DEFAULT_GAME_CONFIG: Dict[str, Any] = {
-    "display.width": 1920,
-    "display.height": 1080,
-    "display.fullscreen": True,
-    "graphics.fov": 90.0,
-    "graphics.fps_limit": 144,
-    "graphics.preset": "ultra",
-    "audio.master": 0.8,
-    "audio.sfx": 1.0,
-    "audio.music": 0.5,
-    "gameplay.difficulty": "normal",
-    "gameplay.invert_y": False,
-}
+class GameConfig:
+    """Dynamic configuration loader with fallback defaults for game entities."""
+    def __init__(self, file_path: str, defaults: Dict[str, Any]):
+        self.path = file_path
+        self.data = defaults
+        self._load_and_merge()
 
-class GameConfigLoader:
-    """Dynamic gaming configuration proxy with environment override mapping."""
+    def _load_and_merge(self) -> None:
+        if os.path.exists(self.path):
+            try:
+                with open(self.path, 'r') as f:
+                    user_data = json.load(f)
+                    self._recursive_update(self.data, user_data)
+            except (json.JSONDecodeError, IOError):
+                pass
 
-    def __init__(self, filepath: Union[str, None] = None) -> None:
-        self._file_defaults = self._load_file(filepath) if filepath else {}
-        self._env_overrides = self._parse_env()
-        self._storage = ChainMap(self._env_overrides, self._file_defaults, DEFAULT_GAME_CONFIG)
+    def _recursive_update(self, base: Dict, update: Dict) -> None:
+        for key, value in update.items():
+            if isinstance(value, dict) and key in base and isinstance(base[key], dict):
+                self._recursive_update(base[key], value)
+            else:
+                base[key] = value
 
-    def _load_file(self, filepath: str) -> Dict[str, Any]:
-        if not os.path.exists(filepath):
-            return {}
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.data.get(key, default)
 
-    def _parse_env(self) -> Dict[str, Any]:
-        overrides = {}
-        prefix = "GAME_CFG_"
-        for key, val in os.environ.items():
-            if key.startswith(prefix):
-                clean_key = key[len(prefix):].lower().replace("__", ".")
-                overrides[clean_key] = self._cast_val(clean_key, val)
-        return overrides
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
 
-    def _cast_val(self, key: str, raw_val: str) -> Any:
-        default_val = DEFAULT_GAME_CONFIG.get(key)
-        if isinstance(default_val, bool):
-            return raw_val.lower() in ("true", "1", "yes")
-        if isinstance(default_val, int):
-            return int(raw_val)
-        if isinstance(default_val, float):
-            return float(raw_val)
-        return raw_val
-
-    def get(self, key: str) -> Any:
-        return self._storage.get(key)
-
-    def __getattr__(self, name: str) -> Any:
-        dot_key = name.replace("_", ".")
-        if dot_key in self._storage:
-            return self._storage[dot_key]
-        raise AttributeError(f"Configuration key '{name}' (or '{dot_key}') not found")
-
-    def dump_active(self) -> Dict[str, Any]:
-        return dict(self._storage)
+# Usage example:
+# cfg = GameConfig('settings.json', {'resolution': [1920, 1080], 'volume': 80})
+# current_res = cfg.get('resolution')
