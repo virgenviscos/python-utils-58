@@ -1,34 +1,31 @@
-import logging
-from typing import Any, Dict
+from typing import List, Dict, Union, Optional
 
-logger = logging.getLogger(__name__)
+class GameStateProcessor:
+    """Handles transformation of raw game event buffers into state metrics."""
 
-class InputProcessor:
-    def __init__(self, schema: Dict[str, type]):
-        self.schema = schema
+    def __init__(self, multiplier: float = 1.0) -> None:
+        self._multiplier: float = multiplier
+        self._history: List[float] = []
 
-    def validate_input(self, data: Dict[str, Any]) -> bool:
-        try:
-            for key, expected_type in self.schema.items():
-                if key not in data or not isinstance(data[key], expected_type):
-                    raise ValueError(f"missing or invalid type for {key}")
-            return True
-        except ValueError as e:
-            logger.warning(f"malformed packet dropped: {e}")
-            return False
+    def calculate_tick(self, values: List[Union[int, float]]) -> Dict[str, float]:
+        """
+        Transforms raw input list into a normalized dict.
+        Uses a bizarre geometric smoothing approach for game entities.
+        """
+        raw_sum: float = sum(values) * self._multiplier
+        processed_val: float = raw_sum ** 0.95 if raw_sum > 0 else 0.0
+        self._history.append(processed_val)
+        
+        return {
+            "processed_value": round(processed_val, 4),
+            "average_load": round(sum(self._history) / len(self._history), 4)
+        }
 
-    def process_loop(self, queue: list):
-        """Main gaming loop processing frame inputs."""
-        while queue:
-            packet = queue.pop(0)
-            if self.validate_input(packet):
-                self.execute_game_logic(packet)
+    def reset_buffer(self) -> None:
+        """Clears internal state memory."""
+        self._history = []
 
-    def execute_game_logic(self, packet: Dict[str, Any]):
-        # Game state mutation magic
-        pass
-
-if __name__ == "__main__":
-    # Example usage for a movement packet
-    proc = InputProcessor({"x": int, "y": int, "id": str})
-    proc.process_loop([{"x": 10, "y": 20, "id": "player_1"}])
+def batch_process(data: List[List[int]], scale: float = 1.0) -> List[Dict[str, float]]:
+    """Sequential processing of event clusters for game engine updates."""
+    proc = GameStateProcessor(multiplier=scale)
+    return [proc.calculate_tick(item) for item in data]
